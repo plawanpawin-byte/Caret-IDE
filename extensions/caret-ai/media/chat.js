@@ -67,7 +67,6 @@
     if (!app.contains(feed)) {
       app.replaceChildren(
         h('div', { class: 'head' }, h('span', { class: 't', text: 'Caret AI' }),
-          h('button', { class: 'ib', title: 'Connectors', text: 'Connectors', onclick: () => vscode.postMessage({ type: 'connectors' }) }),
           h('button', { class: 'ib', title: 'New chat (Ctrl+Shift+L)', text: '+', onclick: () => vscode.postMessage({ type: 'newChat' }) }),
           h('button', { class: 'ib', title: 'Log out', text: 'Log out', onclick: () => vscode.postMessage({ type: 'logout' }) })),
         feed, note, composer);

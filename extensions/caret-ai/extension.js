@@ -75,7 +75,6 @@ class Chat {
       case 'setModel': if (MODELS.some(x => x.id === m.id)) await this.ctx.globalState.update('caret.model', m.id); break;
       case 'setMode': if (['plan', 'edit', 'auto'].includes(m.mode)) await this.ctx.globalState.update('caret.mode', m.mode); break;
       case 'openFile': this.openFile(String(m.path || '')); break;
-      case 'connectors': vscode.commands.executeCommand('caret.connectors'); break;
     }
   }
 
@@ -149,10 +148,9 @@ function activate(ctx) {
     vscode.commands.registerCommand('caret.signIn', () => chat.login()),
     vscode.commands.registerCommand('caret.signOut', () => chat.onMessage({ type: 'logout' })),
   );
-  try { require('./lib/connectors').activate(ctx, auth); } catch (e) { console.error('caret connectors:', e && e.message); }
   chat.init();
-  // test hook for screenshots: CARET_DEV_OPEN_CHAT=chat|connectors
-  if (process.env.CARET_DEV_OPEN_CHAT) setTimeout(() => vscode.commands.executeCommand(process.env.CARET_DEV_OPEN_CHAT === 'connectors' ? 'caret.connectors' : 'caret.chat.focus'), 1500);
+  // test hook for screenshots: CARET_DEV_OPEN_CHAT=1
+  if (process.env.CARET_DEV_OPEN_CHAT) setTimeout(() => vscode.commands.executeCommand('caret.chat.focus'), 1500);
 }
 function deactivate() {}
 module.exports = { activate, deactivate };
