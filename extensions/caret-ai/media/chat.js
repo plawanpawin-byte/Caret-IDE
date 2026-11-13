@@ -37,7 +37,7 @@
         const t = para.trim(); if (!t) continue;
         const ls = t.split('\n');
         if (ls.every(l => /^\s*(?:[-*]|\d+[.)])\s+/.test(l))) {
-          el.append(h('ul', { class: 'tasks' }, ls.map(l => h('li', {}, inline(l.replace(/^\s*(?:[-*]|\d+[.)])\s+/, ''))))));
+          el.append(h(/^\s*\d/.test(ls[0]) ? 'ol' : 'ul', { class: 'md' }, ls.map(l => h('li', {}, inline(l.replace(/^\s*(?:[-*]|\d+[.)])\s+/, ''))))));
         } else el.append(h('p', {}, inline(t)));
       }
     });
@@ -111,8 +111,7 @@
     sendBtn.innerHTML = S.busy ? STOP : SEND; sendBtn.classList.toggle('empty', !S.busy && !input.value.trim() && !pending.length); sendBtn.title = S.busy ? 'Stop' : 'Send (Enter)';
     const missing = [];
     if (!S.tools.claude) missing.push('Claude Code');
-    if (!S.tools.codex) missing.push('Codex');
-    note.replaceChildren(...(missing.length === 2 ? [h('span', {}, 'Neither ', h('b', { text: 'Claude Code' }), ' nor ', h('b', { text: 'Codex' }), ' was found. Install one (for example "npm i -g @anthropic-ai/claude-code") and sign in with it.')] : []));
+    note.replaceChildren(...(missing.length ? [h('span', {}, h('b', { text: 'Claude Code' }), ' was not found. Install it (npm i -g @anthropic-ai/claude-code) and sign in with it.')] : []));
   }
 
   function scroll() { feed.scrollTop = feed.scrollHeight; }
@@ -136,7 +135,8 @@
     feed.append(bubble(text, imgs));
     if (typeof textArg !== 'string') { input.value = ''; input.style.height = ''; }
     pending = []; drawThumbs();
-    curAi = null; curText = ''; scroll();
+    curAi = null; curText = ''; hadList = false; todoCards.clear(); tasks = []; scroll();
+    setStatus('Thinking');
     vscode.postMessage({ type: 'send', text: text || 'See the attached picture.', images: imgs, model: modelSel.value, mode: modeSel.value, full: !!S.full, withContext: ctxOn });
   }
   input.addEventListener('paste', e => {
@@ -155,16 +155,64 @@
   input.addEventListener('input', sync);
   input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; });
 
+  // ---- live status: what the AI is doing right now, with a timer ----
+  let statusEl = null, statusT = 0, statusTimer = null, hadList = false;
+  const VERB = { Read: 'Reading', Glob: 'Searching files', Grep: 'Searching code', Edit: 'Editing', MultiEdit: 'Editing', Write: 'Writing a file', Bash: 'Running a command', WebFetch: 'Reading a web page', WebSearch: 'Searching the web', Task: 'Running a sub-agent', TodoWrite: 'Planning tasks', NotebookEdit: 'Editing a notebook' };
+  function setStatus(label) {
+    if (label == null) { clearInterval(statusTimer); statusTimer = null; statusEl?.remove(); statusEl = null; return; }
+    if (!statusEl) {
+      statusEl = h('div', { class: 'status' }, h('span', { class: 'dots' }, h('i'), h('i'), h('i')), h('span', { class: 'sl' }), h('span', { class: 'st' }));
+      statusT = Date.now();
+      statusTimer = setInterval(() => { const s = Math.round((Date.now() - statusT) / 1000); const el = statusEl?.querySelector('.st'); if (el) el.textContent = s >= 3 ? s + 's' : ''; }, 1000);
+    }
+    statusEl.querySelector('.sl').textContent = label;
+    feed.append(statusEl);   // always the last thing in the feed
+    scroll();
+  }
+  // The AI writes "[ ] task" lines first and "[x] task" lines as it finishes them (see TASK LIST in extension.js).
+  let tasks = [];
+  const TASK_LINE = /^\s*\[( |x|X)\]\s+(.+?)\s*$/;
+  function takeTasks(text, list) {
+    const keep = [];
+    for (const line of text.split('\n')) {
+      const g = TASK_LINE.exec(line);
+      if (!g) { keep.push(line); continue; }
+      const t = g[2];
+      if (g[1] === ' ') { if (!list.some(x => x.content === t)) list.push({ content: t, status: 'pending' }); }
+      else {
+        let x = list.find(y => y.content === t && y.status !== 'completed') || list.find(y => y.status !== 'completed' && (y.content.startsWith(t) || t.startsWith(y.content)));
+        if (!x) { x = { content: t, status: 'pending' }; list.push(x); }
+        x.status = 'completed';
+      }
+    }
+    return keep.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+  function drawTasks(busy) {
+    if (!tasks.length) return;
+    let first = true;
+    const shown = tasks.map(t => ({ content: t.content, status: t.status === 'completed' ? 'completed' : (busy && first ? (first = false, 'in_progress') : 'pending') }));
+    todoCard('turn', shown);
+  }
+  const todoCards = new Map();
+  function todoCard(id, todos) {
+    let el = todoCards.get(id);
+    if (!el) { el = h('div', { class: 'todo' }); todoCards.set(id, el); feed.append(el); curAi = null; }
+    const done = todos.filter(t => t.status === 'completed').length;
+    el.replaceChildren(h('div', { class: 'todo-h', text: 'Tasks ' + done + '/' + todos.length }),
+      ...todos.map(t => h('div', { class: 'ti ' + (t.status || 'pending') }, h('span', { class: 'bx' }), h('span', { text: t.content }))));
+    return el;
+  }
   const argText = a => { if (!a) return ''; return a.command || a.file_path || a.path || a.pattern || a.url || a.description || (typeof a === 'string' ? a : ''); };
 
   window.addEventListener('message', ev => {
     const m = ev.data;
     if (m.type === 'state') { S = { ...S, ...m }; build(); return; }
     if (m.type === 'load') {
-      feed.replaceChildren(); tools.clear(); curAi = null;
+      feed.replaceChildren(); tools.clear(); todoCards.clear(); curAi = null; tasks = [];
       for (const x of m.msgs || []) {
         if (x.r === 'user') feed.append(bubble((x.n ? '[' + x.n + ' picture' + (x.n > 1 ? 's' : '') + '] ' : '') + x.t, []));
-        else if (x.r === 'ai') { const el = h('div', { class: 'msg ai' }); render(el, x.t); feed.append(el); }
+        else if (x.r === 'ai') { const clean = takeTasks(x.t, tasks); if (tasks.length && !todoCards.has('turn')) drawTasks(false); else if (tasks.length) drawTasks(false); if (clean) { const el = h('div', { class: 'msg ai' }); render(el, clean); feed.append(el); } }
+        else if (x.r === 'tool' && x.name === 'TodoWrite' && x.args && x.args.todos) { todoCard('h' + (x.id || Math.random()), x.args.todos); }
         else if (x.r === 'tool') {
           const el = h('details', { class: 'tool ' + (x.status === 'error' ? 'error' : 'done') }, h('summary', {}, h('span', { class: 'dot' }), h('span', { class: 'nm', text: x.name || 'tool' }), h('span', { class: 'ar', text: argText(x.args) })));
           if (x.result) el.append(h('pre', { text: x.result }));
@@ -174,19 +222,35 @@
       scroll(); return;
     }
     if (m.type === 'cleared') { feed.replaceChildren(); hello(); tools.clear(); return; }
-    if (m.type === 'error') { feed.append(h('div', { class: 'err', text: m.text })); scroll(); return; }
+    if (m.type === 'error') { setStatus(null); feed.append(h('div', { class: 'err', text: m.text })); scroll(); return; }
     if (m.type === 'start') { curAi = null; curText = ''; return; }
     if (m.type === 'text') {
+      const before = tasks.length;
+      const clean = takeTasks(m.text, tasks);
+      if (tasks.length) { if (!todoCards.has('turn')) { drawTasks(true); } else drawTasks(true); }
+      if (!clean) { if (statusEl) setStatus('Working'); scroll(); return; }
       if (!curAi) { curAi = h('div', { class: 'msg ai' }); feed.append(curAi); curText = ''; }
-      curText += (curText ? '\n\n' : '') + m.text; render(curAi, curText); scroll(); return;
+      curText += (curText ? '\n\n' : '') + clean; render(curAi, curText);
+      if (statusEl) setStatus('Writing'); scroll(); return;
+    }
+    if (m.type === 'thinking') {
+      let el = feed.querySelector('details.thought.live');
+      if (!el) { el = h('details', { class: 'thought live' }, h('summary', { text: 'Thinking' }), h('div', { class: 'tt' })); feed.append(el); curAi = null; }
+      el.querySelector('.tt').textContent += m.text + '\n';
+      if (statusEl) setStatus('Thinking'); scroll(); return;
     }
     if (m.type === 'tool') {
-      const t = m.tool; let el = tools.get(t.id);
+      const t = m.tool;
+      if (t.name === 'TodoWrite' && t.args && Array.isArray(t.args.todos)) { todoCard(t.id, t.args.todos); setStatus(t.status === 'running' ? VERB.TodoWrite : 'Thinking'); scroll(); return; }
+      if (todoCards.has(t.id)) { return; }
+      let el = tools.get(t.id);
       if (!el) {
         el = h('details', { class: 'tool running' }, h('summary', {}, h('span', { class: 'dot' }), h('span', { class: 'nm', text: t.name || 'tool' }), h('span', { class: 'ar', text: argText(t.args) })));
         tools.set(t.id, el); feed.append(el); curAi = null;
       }
       el.classList.remove('running', 'done', 'error'); el.classList.add(t.status || 'running');
+      if (statusEl) setStatus(t.status === 'running' ? (VERB[t.name] || 'Working') : 'Thinking');
+      if (tasks.length) drawTasks(true);
       if (t.result) { el.querySelector('pre')?.remove(); el.append(h('pre', { text: t.result })); }
       scroll(); return;
     }
@@ -194,9 +258,11 @@
       feed.append(h('div', {}, h('span', { class: 'chip', title: 'Open', text: m.path, onclick: () => vscode.postMessage({ type: 'openFile', path: m.path }) }))); curAi = null; scroll(); return;
     }
     if (m.type === 'done') {
+      setStatus(null); if (tasks.length) drawTasks(false);
+      document.querySelectorAll('details.thought.live').forEach(e => { e.classList.remove('live'); e.querySelector('summary').textContent = 'Thought'; });
       if (m.error) feed.append(h('div', { class: 'err', text: m.error }));
-      else if (m.plan && S.full) { S.mode = 'code'; modeSel.value = 'code'; vscode.postMessage({ type: 'setMode', mode: 'code' }); send('Go ahead and build the plan above.'); }
-      else if (m.plan) {
+      else if (m.plan && tasks.length && S.full) { S.mode = 'code'; modeSel.value = 'code'; vscode.postMessage({ type: 'setMode', mode: 'code' }); send('Go ahead and build the plan above.'); }
+      else if (m.plan && tasks.length) {
         const go = mode => { S.mode = mode; modeSel.value = mode; vscode.postMessage({ type: 'setMode', mode }); card.remove(); send('Go ahead and build the plan above.'); };
         const card = h('div', { class: 'plan' }, h('div', { text: 'Plan ready. Switch to a coding mode to build it?' }),
           h('div', { class: 'acts' }, h('button', { class: 'btn', onclick: () => go('code') }, 'Code'), h('button', { class: 'btn ghost', onclick: () => go('agent') }, 'Agent'), h('button', { class: 'btn ghost', onclick: () => card.remove() }, 'Keep planning')));

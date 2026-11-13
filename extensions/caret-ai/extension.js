@@ -15,15 +15,12 @@ const MODELS = [
   { id: 'haiku-5-5', label: 'Haiku 5.5', tool: 'claude', model: 'claude-haiku-5-5' },
   { id: 'opus-5-5', label: 'Opus 5.5', tool: 'claude', model: 'claude-opus-5-5' },
   { id: 'fable-5-2', label: 'Fable 5.2', tool: 'claude', model: 'claude-fable-5-2' },
-  { id: 'astra-6', label: 'Astra 6', tool: 'codex', model: 'astra-6' },
-  { id: 'luna-6', label: 'Luna 6', tool: 'codex', model: 'luna-6' },
-  { id: 'sol-6', label: 'Sol 6', tool: 'codex', model: 'sol-6' },
 ];
 const MODES = ['plan', 'code', 'agent'];
 const MODE_NOTE = {
-  plan: 'PLAN MODE. Do not change any file and do not run anything that changes the project. Do not write a plan file. Write the plan in your reply itself as a short numbered task list, one line per task, that would get the request done. Do not start the work.',
-  code: '',
-  agent: 'AGENT MODE. Split the work into independent sub-tasks, give each to its own sub-agent (the Task tool) and combine their results. Keep the plan short.',
+  plan: 'PLAN MODE. Do not change any file and do not run anything that changes the project. Do not write a plan file. If the request is a job to do, reply with the tasks that would get it done, one line per task, each line starting with `[ ] ` (nothing else about the list), and do not start the work. If it is only a question or a chat, just answer it normally and write no `[ ]` lines.',
+  code: 'TASK LIST. When the job has two or more steps, FIRST write the list in one short message, one line per task, each line starting with `[ ] `. Then, right after you finish a task, write one line `[x] ` followed by the same task text. Write nothing else about the list. For a simple question or a one-step job, skip the list.',
+  agent: 'TASK LIST. When the job has two or more steps, FIRST write the list in one short message, one line per task, each line starting with `[ ] `. Then, right after you finish a task, write one line `[x] ` followed by the same task text. Write nothing else about the list. For a simple question or a one-step job, skip the list. AGENT MODE. Split the work into independent sub-tasks, give each to its own sub-agent (the Task tool) and combine their results. Keep the plan short.',
 };
 const IMG_RE = /^data:image\/(png|jpeg|webp|gif);base64,([A-Za-z0-9+/=]+)$/;
 const SYSTEM = 'You are the coding assistant inside Caret IDE, working in the open folder. Be direct and concise. Make the change when asked; say what you changed in one or two sentences.';
@@ -181,12 +178,13 @@ class Chat {
     const on = {
       text: t => { msgs.push({ r: 'ai', t: String(t).slice(0, 8000) }); this.post({ type: 'text', text: t }); },
       tool: t => {
-        const rec = { r: 'tool', id: t.id, name: t.name, args: t.args && typeof t.args === 'object' ? { command: t.args.command, file_path: t.args.file_path, path: t.args.path, pattern: t.args.pattern } : t.args, status: t.status, result: t.result ? String(t.result).slice(0, 1500) : undefined };
+        const rec = { r: 'tool', id: t.id, name: t.name, args: t.args && typeof t.args === 'object' ? { command: t.args.command, file_path: t.args.file_path, path: t.args.path, pattern: t.args.pattern, todos: Array.isArray(t.args.todos) ? t.args.todos.slice(0, 40).map(x => ({ content: String(x.content || x.subject || '').slice(0, 200), status: x.status })) : undefined } : t.args, status: t.status, result: t.result ? String(t.result).slice(0, 1500) : undefined };
         const i = msgs.findIndex(m => m.r === 'tool' && m.id === t.id);
         if (i >= 0) msgs[i] = rec; else msgs.push(rec);
         if (msgs.length > 300) msgs.splice(0, msgs.length - 300);
         this.post({ type: 'tool', tool: t });
       },
+      thinking: t => this.post({ type: 'thinking', text: String(t).slice(0, 4000) }),
       file: f => this.post({ type: 'file', path: path.isAbsolute(f) && this.root ? path.relative(this.root, f) : f }),
     };
     this.post({ type: 'start' });

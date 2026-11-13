@@ -54,6 +54,7 @@ function runClaude({ model, mode, prompt, system, sessionId, addDirs, cwd, on })
     if (ev.type === 'assistant') {
       for (const b of ev.message?.content || []) {
         if (b.type === 'text' && b.text) on.text(b.text);
+        else if (b.type === 'thinking' && b.thinking) on.thinking && on.thinking(b.thinking);
         else if (b.type === 'tool_use') {
           on.tool({ id: b.id, name: b.name, args: b.input, status: 'running' });
           const fp = b.input?.file_path || b.input?.notebook_path;
