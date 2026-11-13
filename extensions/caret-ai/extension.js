@@ -21,7 +21,7 @@ const MODELS = [
 ];
 const MODES = ['plan', 'code', 'agent'];
 const MODE_NOTE = {
-  plan: 'PLAN MODE. Do not change any file and do not run anything that changes the project. Reply with a short numbered task list, one line per task, that would get the request done. Do not start the work.',
+  plan: 'PLAN MODE. Do not change any file and do not run anything that changes the project. Do not write a plan file. Write the plan in your reply itself as a short numbered task list, one line per task, that would get the request done. Do not start the work.',
   code: '',
   agent: 'AGENT MODE. Split the work into independent sub-tasks, give each to its own sub-agent (the Task tool) and combine their results. Keep the plan short.',
 };
@@ -59,7 +59,7 @@ class Chat {
     return {
       type: 'state', account: this.account, models: MODELS, root: this.root ? path.basename(this.root) : null,
       tools: { claude: !!cli.resolveCli('claude'), codex: !!cli.resolveCli('codex') },
-      busy: !!this.run, last: MODELS.some(m => m.id === this.ctx.globalState.get('caret.model')) ? this.ctx.globalState.get('caret.model') : MODELS[0].id, mode: MODES.includes(this.ctx.globalState.get('caret.mode')) ? this.ctx.globalState.get('caret.mode') : 'code',
+      busy: !!this.run, last: MODELS.some(m => m.id === this.ctx.globalState.get('caret.model')) ? this.ctx.globalState.get('caret.model') : MODELS[0].id, mode: MODES.includes(this.ctx.globalState.get('caret.mode')) ? this.ctx.globalState.get('caret.mode') : 'code', full: !!this.ctx.globalState.get('caret.full'),
     };
   }
   blank() { return { id: Date.now().toString(36), title: '', session: null, at: Date.now(), msgs: [] }; }
@@ -113,6 +113,7 @@ class Chat {
       case 'login': await this.login(); break;
       case 'logout': { const t = await this.ctx.secrets.get('caret.token'); if (t) await auth.logout(t); await this.clearAccount(); this.push(); this.changed(); break; }
       case 'setModel': if (MODELS.some(x => x.id === m.id)) await this.ctx.globalState.update('caret.model', m.id); break;
+      case 'setFull': await this.ctx.globalState.update('caret.full', !!m.full); break;
       case 'setMode': if (MODES.includes(m.mode)) await this.ctx.globalState.update('caret.mode', m.mode); break;
       case 'openFile': this.openFile(String(m.path || '')); break;
     }
@@ -188,7 +189,7 @@ class Chat {
     };
     this.post({ type: 'start' });
     try {
-      const rmode = mode === 'plan' ? 'plan' : 'edit';
+      const rmode = mode === 'plan' ? 'plan' : (m.full ? 'auto' : 'edit');   // Full access: the tool asks for nothing
       this.run = pick.tool === 'codex' ? runCodex({ model: pick.model, mode: rmode, prompt, system, images: files, cwd: this.root, on })
         : runClaude({ model: pick.model, mode: rmode, prompt, system, sessionId: this.session, addDirs: files.length ? [path.dirname(files[0])] : [], cwd: this.root, on });
       this.push();

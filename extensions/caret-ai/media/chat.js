@@ -2,7 +2,7 @@
   const vscode = acquireVsCodeApi();
   const app = document.getElementById('app');
   const logo = document.body.dataset.logo;
-  let S = { account: null, models: [], tools: {}, busy: false, last: 'sonnet-5-5', mode: 'code', root: null };
+  let S = { account: null, models: [], tools: {}, busy: false, last: 'sonnet-5-5', mode: 'code', full: false, root: null };
   let pending = [];   // pasted pictures waiting to be sent (data URLs)
   let ctxOn = true;
   let curAi = null, curText = '';
@@ -48,6 +48,9 @@
   const modelSel = h('select', { class: 'plain', title: 'Model', onchange: e => { S.last = e.target.value; vscode.postMessage({ type: 'setModel', id: S.last }); } });
   const modeSel = h('select', { class: 'pill', title: 'Plan: a task list, no changes. Code: writes the code. Agent: like Code, with the work split between sub-agents.', onchange: e => { S.mode = e.target.value; vscode.postMessage({ type: 'setMode', mode: S.mode }); } },
     h('option', { value: 'plan', text: 'Plan' }), h('option', { value: 'code', text: 'Code' }), h('option', { value: 'agent', text: 'Agent' }));
+  const SHIELD = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V6z"/></svg>';
+  const fullBtn = h('button', { class: 'fullbtn', title: 'Full access: accept everything without asking (writing files, running commands, switching from Plan to Code). Use it in folders you trust.', onclick: () => { S.full = !S.full; vscode.postMessage({ type: 'setFull', full: S.full }); build(); } });
+  fullBtn.innerHTML = SHIELD + '<span>Full access</span>';
   const CLIP = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l9-9a3.7 3.7 0 0 1 5.2 5.2l-9 9a1.8 1.8 0 0 1-2.6-2.6l8.2-8.2"/></svg>';
   const ctxBtn = h('button', { class: 'tg on', title: 'Include the open file and selection', onclick: () => { ctxOn = !ctxOn; ctxBtn.classList.toggle('on', ctxOn); } });
   ctxBtn.innerHTML = CLIP;
@@ -55,7 +58,7 @@
   const SEND = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
   const STOP = '<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>';
   const thumbs = h('div', { class: 'thumbs' });
-  const composer = h('div', { class: 'composer' }, thumbs, input, h('div', { class: 'row' }, modeSel, modelSel, h('span', { class: 'grow' }), ctxBtn, sendBtn));
+  const composer = h('div', { class: 'composer' }, thumbs, input, h('div', { class: 'row' }, modeSel, modelSel, h('span', { class: 'grow' }), fullBtn, ctxBtn, sendBtn));
   const note = h('div', { class: 'note' });
 
   function hello() {
@@ -73,6 +76,7 @@
     }
     modelSel.replaceChildren(...S.models.map(m => h('option', { value: m.id, text: m.label, selected: m.id === S.last })));
     modeSel.value = S.mode;
+    fullBtn.classList.toggle('on', !!S.full);
     sendBtn.innerHTML = S.busy ? STOP : SEND; sendBtn.classList.toggle('empty', !S.busy && !input.value.trim() && !pending.length); sendBtn.title = S.busy ? 'Stop' : 'Send (Enter)';
     const missing = [];
     if (!S.tools.claude) missing.push('Claude Code');
@@ -102,7 +106,7 @@
     if (typeof textArg !== 'string') { input.value = ''; input.style.height = ''; }
     pending = []; drawThumbs();
     curAi = null; curText = ''; scroll();
-    vscode.postMessage({ type: 'send', text: text || 'See the attached picture.', images: imgs, model: modelSel.value, mode: modeSel.value, withContext: ctxOn });
+    vscode.postMessage({ type: 'send', text: text || 'See the attached picture.', images: imgs, model: modelSel.value, mode: modeSel.value, full: !!S.full, withContext: ctxOn });
   }
   input.addEventListener('paste', e => {
     const items = [...(e.clipboardData?.items || [])].filter(i => i.kind === 'file' && /^image\//.test(i.type));
@@ -160,6 +164,7 @@
     }
     if (m.type === 'done') {
       if (m.error) feed.append(h('div', { class: 'err', text: m.error }));
+      else if (m.plan && S.full) { S.mode = 'code'; modeSel.value = 'code'; vscode.postMessage({ type: 'setMode', mode: 'code' }); send('Go ahead and build the plan above.'); }
       else if (m.plan) {
         const go = mode => { S.mode = mode; modeSel.value = mode; vscode.postMessage({ type: 'setMode', mode }); card.remove(); send('Go ahead and build the plan above.'); };
         const card = h('div', { class: 'plan' }, h('div', { text: 'Plan ready. Switch to a coding mode to build it?' }),
