@@ -19,7 +19,8 @@ const SYSTEM = 'You are the coding assistant inside Caret IDE, working in the op
 class Chat {
   constructor(ctx) {
     this.ctx = ctx; this.view = null; this.run = null; this.account = null;
-    this.session = ctx.workspaceState.get('caret.session') || null;
+    this.chats = ctx.workspaceState.get('caret.chats') || [];
+    this.cur = this.blank();
     this.root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || null;
   }
 
@@ -49,11 +50,36 @@ class Chat {
       busy: !!this.run, last: this.ctx.globalState.get('caret.model') || 'claude:default', mode: this.ctx.globalState.get('caret.mode') || 'edit',
     };
   }
+  blank() { return { id: Date.now().toString(36), title: '', session: null, at: Date.now(), msgs: [] }; }
+  get session() { return this.cur.session; }
+  titleNow() { try { if (this.view) this.view.title = this.cur.title || 'New chat'; } catch {} }
+  // Keep finished chats in the workspace so the history list can bring them back.
+  async save() {
+    if (!this.cur.msgs.length) return;
+    this.cur.at = Date.now();
+    this.chats = [this.cur, ...this.chats.filter(c => c.id !== this.cur.id)].slice(0, 40);
+    await this.ctx.workspaceState.update('caret.chats', this.chats);
+  }
+  async newChat() {
+    await this.save();
+    this.cur = this.blank();
+    this.post({ type: 'cleared' }); this.titleNow();
+  }
+  async history() {
+    await this.save();
+    if (!this.chats.length) { vscode.window.showInformationMessage('No chats yet.'); return; }
+    const ago = t => { const m = Math.max(1, Math.round((Date.now() - t) / 60000)); return m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' days ago'; };
+    const pick = await vscode.window.showQuickPick(this.chats.map(c => ({ label: c.title || 'Chat', description: ago(c.at), id: c.id })), { placeHolder: 'Chat history' });
+    if (!pick) return;
+    const c = this.chats.find(x => x.id === pick.id);
+    if (!c || this.run) return;
+    this.cur = c; this.post({ type: 'load', msgs: c.msgs }); this.titleNow();
+  }
   push() { this.post(this.state()); }
   post(m) { try { this.view?.webview.postMessage(m); } catch {} }
 
   resolveWebviewView(view) {
-    this.view = view;
+    this.view = view; this.titleNow();
     const media = vscode.Uri.joinPath(this.ctx.extensionUri, 'media');
     view.webview.options = { enableScripts: true, localResourceRoots: [media] };
     const w = view.webview, u = f => w.asWebviewUri(vscode.Uri.joinPath(media, f));
@@ -71,7 +97,7 @@ class Chat {
       case 'ready': this.push(); break;
       case 'send': await this.send(m); break;
       case 'stop': this.run?.stop(); break;
-      case 'newChat': this.session = null; await this.ctx.workspaceState.update('caret.session', undefined); this.post({ type: 'cleared' }); break;
+      case 'newChat': await this.newChat(); break;
       case 'login': await this.login(); break;
       case 'logout': { const t = await this.ctx.secrets.get('caret.token'); if (t) await auth.logout(t); await this.clearAccount(); this.push(); this.changed(); break; }
       case 'setModel': if (MODELS.some(x => x.id === m.id)) await this.ctx.globalState.update('caret.model', m.id); break;
@@ -123,9 +149,18 @@ class Chat {
       if (ok !== 'Allow once') return;
     }
     const prompt = (m.withContext ? this.context() : '') + text;
+    const msgs = this.cur.msgs;
+    if (!msgs.length) { this.cur.title = text.replace(/\s+/g, ' ').slice(0, 40); this.titleNow(); }
+    msgs.push({ r: 'user', t: text.slice(0, 8000) });
     const on = {
-      text: t => this.post({ type: 'text', text: t }),
-      tool: t => this.post({ type: 'tool', tool: t }),
+      text: t => { msgs.push({ r: 'ai', t: String(t).slice(0, 8000) }); this.post({ type: 'text', text: t }); },
+      tool: t => {
+        const rec = { r: 'tool', id: t.id, name: t.name, args: t.args && typeof t.args === 'object' ? { command: t.args.command, file_path: t.args.file_path, path: t.args.path, pattern: t.args.pattern } : t.args, status: t.status, result: t.result ? String(t.result).slice(0, 1500) : undefined };
+        const i = msgs.findIndex(m => m.r === 'tool' && m.id === t.id);
+        if (i >= 0) msgs[i] = rec; else msgs.push(rec);
+        if (msgs.length > 300) msgs.splice(0, msgs.length - 300);
+        this.post({ type: 'tool', tool: t });
+      },
       file: f => this.post({ type: 'file', path: path.isAbsolute(f) && this.root ? path.relative(this.root, f) : f }),
     };
     this.post({ type: 'start' });
@@ -134,7 +169,8 @@ class Chat {
         : runClaude({ model, mode, prompt, system: SYSTEM, sessionId: this.session, cwd: this.root, on });
       this.push();
       const r = await this.run.done;
-      if (r.sessionId) { this.session = r.sessionId; await this.ctx.workspaceState.update('caret.session', r.sessionId); }
+      if (r.sessionId) this.cur.session = r.sessionId;
+      await this.save();
       this.post({ type: 'done', error: r.error || null });
     } catch (e) { this.post({ type: 'done', error: String(e.message || e) }); }
     this.run = null; this.push();
@@ -146,7 +182,8 @@ function activate(ctx) {
   ctx.subscriptions.push(
     vscode.window.registerWebviewViewProvider('caret.chat', chat, { webviewOptions: { retainContextWhenHidden: true } }),
     vscode.commands.registerCommand('caret.openChat', () => vscode.commands.executeCommand('caret.chat.focus')),
-    vscode.commands.registerCommand('caret.newChat', () => { chat.onMessage({ type: 'newChat' }); vscode.commands.executeCommand('caret.chat.focus'); }),
+    vscode.commands.registerCommand('caret.newChat', () => { chat.newChat(); vscode.commands.executeCommand('caret.chat.focus'); }),
+    vscode.commands.registerCommand('caret.history', () => chat.history()),
     vscode.commands.registerCommand('caret.welcome', () => welcome.show(ctx, chat)),
     vscode.commands.registerCommand('caret.signIn', () => chat.login()),
     vscode.commands.registerCommand('caret.signOut', () => chat.onMessage({ type: 'logout' })),

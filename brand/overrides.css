@@ -5,3 +5,6 @@
 .monaco-workbench .part.auxiliarybar .composite-bar > .monaco-action-bar .actions-container { justify-content: center; gap: 10px; }
 .monaco-workbench .part.sidebar .composite-bar .action-item .action-label { border-radius: 8px; }
 .monaco-workbench .part.statusbar { font-size: 11px; }
+
+/* Chat panel header: keep the + and history icons, drop the "..." menu */
+.monaco-workbench .part.auxiliarybar .composite.title .actions-container .action-item:has(.codicon-toolbar-more) { display: none; }

@@ -17,10 +17,17 @@
     "commands": [
       { "command": "caret.welcome", "title": "Caret: Welcome" },
       { "command": "caret.openChat", "title": "Caret: Open Chat" },
-      { "command": "caret.newChat", "title": "Caret: New Chat" },
+      { "command": "caret.newChat", "title": "Caret: New Chat", "icon": "$(add)" },
+      { "command": "caret.history", "title": "Caret: Chat History", "icon": "$(history)" },
       { "command": "caret.signIn", "title": "Caret: Log In" },
       { "command": "caret.signOut", "title": "Caret: Log Out" }
     ],
+    "menus": {
+      "view/title": [
+        { "command": "caret.newChat", "when": "view == caret.chat", "group": "navigation@1" },
+        { "command": "caret.history", "when": "view == caret.chat", "group": "navigation@2" }
+      ]
+    },
     "keybindings": [
       { "command": "caret.openChat", "key": "ctrl+l" },
       { "command": "caret.newChat", "key": "ctrl+shift+l" }

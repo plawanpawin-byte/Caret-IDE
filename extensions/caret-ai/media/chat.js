@@ -37,15 +37,17 @@
   }
 
   const feed = h('div', { class: 'feed' });
-  const input = h('textarea', { rows: 1, placeholder: 'Ask anything, / for actions' });
-  const modelSel = h('select', { title: 'Model', onchange: e => { S.last = e.target.value; vscode.postMessage({ type: 'setModel', id: S.last }); } });
-  const modeSel = h('select', { title: 'How the AI works', onchange: e => { S.mode = e.target.value; vscode.postMessage({ type: 'setMode', mode: S.mode }); } },
-    h('option', { value: 'plan', text: 'Plan (read only)' }), h('option', { value: 'edit', text: 'Edit' }), h('option', { value: 'auto', text: 'Full access' }));
-  const ctxBtn = h('button', { class: 'tg on', title: 'Include the open file and selection', text: '@ file', onclick: () => { ctxOn = !ctxOn; ctxBtn.classList.toggle('on', ctxOn); } });
+  const input = h('textarea', { rows: 1, placeholder: 'Plan, build, ask anything' });
+  const modelSel = h('select', { class: 'plain', title: 'Model', onchange: e => { S.last = e.target.value; vscode.postMessage({ type: 'setModel', id: S.last }); } });
+  const modeSel = h('select', { class: 'pill', title: 'Plan: read only. Agent: edits files. Full access: runs anything.', onchange: e => { S.mode = e.target.value; vscode.postMessage({ type: 'setMode', mode: S.mode }); } },
+    h('option', { value: 'plan', text: 'Plan' }), h('option', { value: 'edit', text: 'Agent' }), h('option', { value: 'auto', text: 'Full access' }));
+  const CLIP = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l9-9a3.7 3.7 0 0 1 5.2 5.2l-9 9a1.8 1.8 0 0 1-2.6-2.6l8.2-8.2"/></svg>';
+  const ctxBtn = h('button', { class: 'tg on', title: 'Include the open file and selection', onclick: () => { ctxOn = !ctxOn; ctxBtn.classList.toggle('on', ctxOn); } });
+  ctxBtn.innerHTML = CLIP;
   const sendBtn = h('button', { class: 'send', title: 'Send (Enter)', onclick: () => (S.busy ? vscode.postMessage({ type: 'stop' }) : send()) });
   const SEND = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
   const STOP = '<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>';
-  const composer = h('div', { class: 'composer' }, input, h('div', { class: 'row' }, modelSel, modeSel, h('span', { class: 'grow' }), ctxBtn, sendBtn));
+  const composer = h('div', { class: 'composer' }, input, h('div', { class: 'row' }, modeSel, modelSel, h('span', { class: 'grow' }), ctxBtn, sendBtn));
   const note = h('div', { class: 'note' });
 
   function hello() {
@@ -58,15 +60,12 @@
   function build() {
     if (!app.contains(feed)) {
       app.replaceChildren(
-        h('div', { class: 'head' }, h('span', { class: 't' }),
-          h('button', { class: 'ib', title: 'New chat (Ctrl+Shift+L)', text: '+', onclick: () => vscode.postMessage({ type: 'newChat' }) }),
-          h('button', { class: 'ib', title: 'Log out', text: 'Log out', onclick: () => vscode.postMessage({ type: 'logout' }) })),
         feed, note, composer);
       if (!feed.childElementCount) hello();
     }
     modelSel.replaceChildren(...S.models.map(m => h('option', { value: m.id, text: m.label, selected: m.id === S.last })));
     modeSel.value = S.mode;
-    sendBtn.innerHTML = S.busy ? STOP : SEND; sendBtn.title = S.busy ? 'Stop' : 'Send (Enter)';
+    sendBtn.innerHTML = S.busy ? STOP : SEND; sendBtn.classList.toggle('empty', !S.busy && !input.value.trim()); sendBtn.title = S.busy ? 'Stop' : 'Send (Enter)';
     const missing = [];
     if (!S.tools.claude) missing.push('Claude Code');
     if (!S.tools.codex) missing.push('Codex');
@@ -79,11 +78,13 @@
     if (!text || S.busy) return;
     if (feed.querySelector('.hello')) feed.replaceChildren();
     feed.append(h('div', { class: 'msg user', text }));
-    input.value = ''; input.style.height = '';
+    input.value = ''; input.style.height = ''; sendBtn.classList.add('empty');
     curAi = null; curText = ''; scroll();
     vscode.postMessage({ type: 'send', text, model: modelSel.value, mode: modeSel.value, withContext: ctxOn });
   }
   input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+  const sync = () => sendBtn.classList.toggle('empty', !S.busy && !input.value.trim());
+  input.addEventListener('input', sync);
   input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 220) + 'px'; });
 
   const argText = a => { if (!a) return ''; return a.command || a.file_path || a.path || a.pattern || a.url || a.description || (typeof a === 'string' ? a : ''); };
@@ -91,6 +92,19 @@
   window.addEventListener('message', ev => {
     const m = ev.data;
     if (m.type === 'state') { S = { ...S, ...m }; build(); return; }
+    if (m.type === 'load') {
+      feed.replaceChildren(); tools.clear(); curAi = null;
+      for (const x of m.msgs || []) {
+        if (x.r === 'user') feed.append(h('div', { class: 'msg user', text: x.t }));
+        else if (x.r === 'ai') { const el = h('div', { class: 'msg ai' }); render(el, x.t); feed.append(el); }
+        else if (x.r === 'tool') {
+          const el = h('details', { class: 'tool ' + (x.status === 'error' ? 'error' : 'done') }, h('summary', {}, h('span', { class: 'dot' }), h('span', { class: 'nm', text: x.name || 'tool' }), h('span', { class: 'ar', text: argText(x.args) })));
+          if (x.result) el.append(h('pre', { text: x.result }));
+          feed.append(el);
+        }
+      }
+      scroll(); return;
+    }
     if (m.type === 'cleared') { feed.replaceChildren(); hello(); tools.clear(); return; }
     if (m.type === 'error') { feed.append(h('div', { class: 'err', text: m.text })); scroll(); return; }
     if (m.type === 'start') { curAi = null; curText = ''; return; }
