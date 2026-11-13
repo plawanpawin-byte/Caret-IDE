@@ -1,0 +1,29 @@
+{
+  "name": "caret-ai",
+  "displayName": "Caret AI",
+  "description": "Chat with Claude Code and Codex inside Caret IDE, and connect tools (MCP).",
+  "version": "0.1.0",
+  "publisher": "caret",
+  "engines": { "vscode": "^1.90.0" },
+  "main": "./extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [{ "id": "caret", "title": "Caret AI", "icon": "media/caret.svg" }]
+    },
+    "views": {
+      "caret": [{ "type": "webview", "id": "caret.chat", "name": "Caret AI" }]
+    },
+    "commands": [
+      { "command": "caret.openChat", "title": "Caret: Open Chat" },
+      { "command": "caret.newChat", "title": "Caret: New Chat" },
+      { "command": "caret.connectors", "title": "Caret: Connectors" },
+      { "command": "caret.signIn", "title": "Caret: Log In" },
+      { "command": "caret.signOut", "title": "Caret: Log Out" }
+    ],
+    "keybindings": [
+      { "command": "caret.openChat", "key": "ctrl+l" },
+      { "command": "caret.newChat", "key": "ctrl+shift+l" }
+    ]
+  }
+}

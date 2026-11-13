@@ -1,0 +1,38 @@
+{
+  "name": "caret-theme",
+  "displayName": "Caret Dark and defaults",
+  "description": "The near-black Caret theme.",
+  "version": "1.0.0",
+  "publisher": "caret",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Themes"
+  ],
+  "contributes": {
+    "themes": [
+      {
+        "label": "Caret Dark",
+        "uiTheme": "vs-dark",
+        "path": "./themes/caret-dark-color-theme.json"
+      }
+    ],
+    "configurationDefaults": {
+      "workbench.colorTheme": "Caret Dark",
+      "workbench.activityBar.location": "top",
+      "workbench.startupEditor": "none",
+      "editor.minimap.enabled": false,
+      "editor.fontSize": 14,
+      "editor.smoothScrolling": true,
+      "editor.cursorSmoothCaretAnimation": "on",
+      "workbench.layoutControl.enabled": false,
+      "telemetry.telemetryLevel": "off",
+      "files.autoSave": "afterDelay",
+      "git.autofetch": true,
+      "git.confirmSync": false,
+      "window.commandCenter": true,
+      "chat.disableAIFeatures": true
+    }
+  }
+}
