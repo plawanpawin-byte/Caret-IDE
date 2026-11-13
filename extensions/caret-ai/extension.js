@@ -2,18 +2,30 @@
 const vscode = require('vscode');
 const path = require('path');
 const crypto = require('crypto');
+const os = require('os');
+const fs = require('fs');
 const auth = require('./lib/auth');
 const cli = require('./lib/cli');
 const welcome = require('./lib/welcome');
 const { runClaude, runCodex } = require('./lib/runners');
 
+// tool: which command-line tool runs it; model: the name handed to that tool.
 const MODELS = [
-  { id: 'claude:default', label: 'Claude Code' },
-  { id: 'claude:opus', label: 'Claude Opus' },
-  { id: 'claude:sonnet', label: 'Claude Sonnet' },
-  { id: 'claude:haiku', label: 'Claude Haiku' },
-  { id: 'codex:default', label: 'Codex' },
+  { id: 'sonnet-5-5', label: 'Sonnet 5.5', tool: 'claude', model: 'claude-sonnet-5-5' },
+  { id: 'haiku-5-5', label: 'Haiku 5.5', tool: 'claude', model: 'claude-haiku-5-5' },
+  { id: 'opus-5-5', label: 'Opus 5.5', tool: 'claude', model: 'claude-opus-5-5' },
+  { id: 'fable-5-2', label: 'Fable 5.2', tool: 'claude', model: 'claude-fable-5-2' },
+  { id: 'astra-6', label: 'Astra 6', tool: 'codex', model: 'astra-6' },
+  { id: 'luna-6', label: 'Luna 6', tool: 'codex', model: 'luna-6' },
+  { id: 'sol-6', label: 'Sol 6', tool: 'codex', model: 'sol-6' },
 ];
+const MODES = ['plan', 'code', 'agent'];
+const MODE_NOTE = {
+  plan: 'PLAN MODE. Do not change any file and do not run anything that changes the project. Reply with a short numbered task list, one line per task, that would get the request done. Do not start the work.',
+  code: '',
+  agent: 'AGENT MODE. Split the work into independent sub-tasks, give each to its own sub-agent (the Task tool) and combine their results. Keep the plan short.',
+};
+const IMG_RE = /^data:image\/(png|jpeg|webp|gif);base64,([A-Za-z0-9+/=]+)$/;
 const SYSTEM = 'You are the coding assistant inside Caret IDE, working in the open folder. Be direct and concise. Make the change when asked; say what you changed in one or two sentences.';
 
 class Chat {
@@ -47,7 +59,7 @@ class Chat {
     return {
       type: 'state', account: this.account, models: MODELS, root: this.root ? path.basename(this.root) : null,
       tools: { claude: !!cli.resolveCli('claude'), codex: !!cli.resolveCli('codex') },
-      busy: !!this.run, last: this.ctx.globalState.get('caret.model') || 'claude:default', mode: this.ctx.globalState.get('caret.mode') || 'edit',
+      busy: !!this.run, last: MODELS.some(m => m.id === this.ctx.globalState.get('caret.model')) ? this.ctx.globalState.get('caret.model') : MODELS[0].id, mode: MODES.includes(this.ctx.globalState.get('caret.mode')) ? this.ctx.globalState.get('caret.mode') : 'code',
     };
   }
   blank() { return { id: Date.now().toString(36), title: '', session: null, at: Date.now(), msgs: [] }; }
@@ -101,7 +113,7 @@ class Chat {
       case 'login': await this.login(); break;
       case 'logout': { const t = await this.ctx.secrets.get('caret.token'); if (t) await auth.logout(t); await this.clearAccount(); this.push(); this.changed(); break; }
       case 'setModel': if (MODELS.some(x => x.id === m.id)) await this.ctx.globalState.update('caret.model', m.id); break;
-      case 'setMode': if (['plan', 'edit', 'auto'].includes(m.mode)) await this.ctx.globalState.update('caret.mode', m.mode); break;
+      case 'setMode': if (MODES.includes(m.mode)) await this.ctx.globalState.update('caret.mode', m.mode); break;
       case 'openFile': this.openFile(String(m.path || '')); break;
     }
   }
@@ -141,17 +153,28 @@ class Chat {
     if (!this.account) { this.post({ type: 'error', text: 'Log in first.' }); return; }
     const text = String(m.text || '').trim().slice(0, 20000);
     if (!text) return;
-    const [tool, model] = String(m.model || 'claude:default').split(':');
-    const mode = ['plan', 'edit', 'auto'].includes(m.mode) ? m.mode : 'edit';
+    const pick = MODELS.find(x => x.id === m.model) || MODELS[0];
+    const mode = MODES.includes(m.mode) ? m.mode : 'code';
     if (!this.root) { this.post({ type: 'error', text: 'Open a folder first (File, Open Folder).' }); return; }
-    if (mode === 'auto') {
-      const ok = await vscode.window.showWarningMessage('Full access lets the AI run any command and change any file without asking. Use it only in a folder you trust.', { modal: true }, 'Allow once');
-      if (ok !== 'Allow once') return;
+    // Pasted pictures go to a temporary folder; the tools read them from there.
+    const files = [];
+    const imgs = Array.isArray(m.images) ? m.images.slice(0, 6) : [];
+    if (imgs.length) {
+      const dir = path.join(os.tmpdir(), 'caret-images');
+      fs.mkdirSync(dir, { recursive: true });
+      imgs.forEach((u, i) => {
+        const g = IMG_RE.exec(String(u));
+        if (!g || g[2].length > 11e6) return;
+        const f = path.join(dir, `${Date.now().toString(36)}-${i}.${g[1] === 'jpeg' ? 'jpg' : g[1]}`);
+        fs.writeFileSync(f, Buffer.from(g[2], 'base64')); files.push(f);
+      });
     }
-    const prompt = (m.withContext ? this.context() : '') + text;
+    const attach = files.length ? 'Attached image files (open them with the Read tool):\n' + files.map(f => '- ' + f).join('\n') + '\n\n' : '';
+    const prompt = (m.withContext ? this.context() : '') + attach + text;
+    const system = SYSTEM + (MODE_NOTE[mode] ? '\n\n' + MODE_NOTE[mode] : '');
     const msgs = this.cur.msgs;
     if (!msgs.length) { this.cur.title = text.replace(/\s+/g, ' ').slice(0, 40); this.titleNow(); }
-    msgs.push({ r: 'user', t: text.slice(0, 8000) });
+    msgs.push({ r: 'user', t: text.slice(0, 8000), n: files.length });
     const on = {
       text: t => { msgs.push({ r: 'ai', t: String(t).slice(0, 8000) }); this.post({ type: 'text', text: t }); },
       tool: t => {
@@ -165,13 +188,14 @@ class Chat {
     };
     this.post({ type: 'start' });
     try {
-      this.run = tool === 'codex' ? runCodex({ model, mode, prompt, system: SYSTEM, cwd: this.root, on })
-        : runClaude({ model, mode, prompt, system: SYSTEM, sessionId: this.session, cwd: this.root, on });
+      const rmode = mode === 'plan' ? 'plan' : 'edit';
+      this.run = pick.tool === 'codex' ? runCodex({ model: pick.model, mode: rmode, prompt, system, images: files, cwd: this.root, on })
+        : runClaude({ model: pick.model, mode: rmode, prompt, system, sessionId: this.session, addDirs: files.length ? [path.dirname(files[0])] : [], cwd: this.root, on });
       this.push();
       const r = await this.run.done;
       if (r.sessionId) this.cur.session = r.sessionId;
       await this.save();
-      this.post({ type: 'done', error: r.error || null });
+      this.post({ type: 'done', error: r.error || null, plan: mode === 'plan' && !r.error });
     } catch (e) { this.post({ type: 'done', error: String(e.message || e) }); }
     this.run = null; this.push();
   }

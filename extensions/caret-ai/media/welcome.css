@@ -1,6 +1,6 @@
-:root { --card: #222222; --card2: #2a2a2a; --line: #333333; --text: #b8b5af; --hi: #ecebe8; --mute: #7d7a74; --faint: #55534f; }
+:root { --card: #181818; --card2: #1f1f1f; --line: #2a2a2a; --text: #b8b5af; --hi: #ecebe8; --mute: #7d7a74; --faint: #55534f; }
 * { box-sizing: border-box; }
-html, body { height: 100%; margin: 0; background: #161616; color: var(--text); font: 13px/1.5 var(--vscode-font-family, "Segoe UI", system-ui, sans-serif); }
+html, body { height: 100%; margin: 0; background: #0b0b0b; color: var(--text); font: 13px/1.5 var(--vscode-font-family, "Segoe UI", system-ui, sans-serif); }
 .wrap { min-height: 100%; display: flex; flex-direction: column; align-items: center; padding: 9vh 24px 40px; }
 .logo { width: 132px; height: 132px; }
 h1 { margin: 6px 0 2px; font-size: 26px; font-weight: 300; letter-spacing: .02em; color: var(--hi); }

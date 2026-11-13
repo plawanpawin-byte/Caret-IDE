@@ -34,10 +34,11 @@ function lines(stream, onLine) {
 const short = (v, n = 3000) => { const s = typeof v === 'string' ? v : JSON.stringify(v); return s && s.length > n ? s.slice(0, n) + '…' : s; };
 
 // mode: 'plan' (read only) | 'edit' (may change files, commands need no approval inside the folder rules of the tool) | 'auto' (everything)
-function runClaude({ model, mode, prompt, system, sessionId, cwd, on }) {
+function runClaude({ model, mode, prompt, system, sessionId, addDirs, cwd, on }) {
   const args = ['-p', '--output-format', 'stream-json', '--verbose'];
   if (model && model !== 'default') args.push('--model', model);
   if (sessionId) args.push('--resume', sessionId);
+  for (const d of addDirs || []) args.push('--add-dir', d);
   if (system) args.push('--append-system-prompt', system);
   if (mode === 'plan') args.push('--permission-mode', 'plan');
   else if (mode === 'auto') args.push('--permission-mode', 'bypassPermissions');
@@ -83,13 +84,14 @@ function runClaude({ model, mode, prompt, system, sessionId, cwd, on }) {
   return { stop: () => killTree(proc), done };
 }
 
-function runCodex({ model, mode, prompt, system, cwd, on }) {
+function runCodex({ model, mode, prompt, system, images, cwd, on }) {
   const root = cwd || os.homedir();
   const args = ['exec', '--json', '--skip-git-repo-check', '-C', root];
   if (model && model !== 'default') args.push('-m', model);
   if (mode === 'plan') args.push('--sandbox', 'read-only');
   else if (mode === 'edit') args.push('--sandbox', 'workspace-write');
   else args.push('--dangerously-bypass-approvals-and-sandbox');
+  for (const f of images || []) args.push('-i', f);
   args.push('-');
   const proc = startCli('codex', args, { cwd: root, stdin: `${system || ''}\n\n---\n\nUSER REQUEST:\n${prompt}` });
   const result = { error: null };
