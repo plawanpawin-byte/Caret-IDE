@@ -1,5 +1,5 @@
 const { spawn } = require('child_process');
-const exe = '' + __dirname.replace(/\/g,'/') + '/../dist/Caret-IDE/Caret IDE.exe';
+const exe = require('path').join(__dirname, '..', 'dist', 'Caret-IDE', 'Caret IDE.exe');
 const sp = require('os').tmpdir();
 const p = spawn(exe, ['--remote-debugging-port=9333', '--user-data-dir=' + sp + '/cide-ud9', '--extensions-dir=' + sp + '/cide-ext9', '--disable-workspace-trust', 'D:/carnet-web'], { env: { ...process.env, CARET_FAKE: '1' }, stdio: 'ignore' });
 (async () => {
