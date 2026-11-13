@@ -1,12 +1,12 @@
 'use strict';
-// Signing in to Caret IDE with GitHub through the Carnet website (same flow as Caret Agent):
+// Signing in to Caret IDE with GitHub through the Caret website (same flow as Caret Agent):
 // open the site with a random state and a PKCE challenge, wait on a port only this computer can reach, trade the
 // one-time code (plus the PKCE verifier kept here) for an app token. `grant` asks for GitHub access instead,
 // for the GitHub connector; that token is returned to the caller and never stored by this module.
 const http = require('http');
 const crypto = require('crypto');
 
-const SITE = 'https://carnet.scratch-2026-11-04-b765df.workers.dev';
+const SITE = 'https://caret-agent.scratch-2026-11-04-b765df.workers.dev';
 const WAIT_MS = 5 * 60 * 1000;
 const b64u = buf => Buffer.from(buf).toString('base64url');
 let pending = null;
