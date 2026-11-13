@@ -55,18 +55,10 @@
       S.root ? null : h('p', { text: 'Open a folder to start (File, Open Folder).' })));
   }
 
-  function gate() {
-    app.replaceChildren(h('div', { class: 'feed' }, h('div', { class: 'hello' }, h('img', { src: logo, alt: '' }),
-      h('h1', { text: 'The free IDE. No subscription.' }),
-      h('button', { class: 'btn', text: 'Log In', onclick: e => { e.target.disabled = true; e.target.textContent = 'Finish in your browser…'; vscode.postMessage({ type: 'login' }); } }),
-      h('p', { text: 'You sign in on the website with GitHub.' }))));
-  }
-
   function build() {
-    if (!S.account) { gate(); return; }
     if (!app.contains(feed)) {
       app.replaceChildren(
-        h('div', { class: 'head' }, h('span', { class: 't', text: 'Caret AI' }),
+        h('div', { class: 'head' }, h('span', { class: 't' }),
           h('button', { class: 'ib', title: 'New chat (Ctrl+Shift+L)', text: '+', onclick: () => vscode.postMessage({ type: 'newChat' }) }),
           h('button', { class: 'ib', title: 'Log out', text: 'Log out', onclick: () => vscode.postMessage({ type: 'logout' }) })),
         feed, note, composer);

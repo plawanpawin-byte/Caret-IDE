@@ -1,0 +1,7 @@
+/* Carnet look: centered tab row, quieter chrome */
+.monaco-workbench .part.sidebar .composite.header .composite-bar-container,
+.monaco-workbench .part.auxiliarybar .composite.header .composite-bar-container { display: flex; justify-content: center; }
+.monaco-workbench .part.sidebar .composite-bar > .monaco-action-bar .actions-container,
+.monaco-workbench .part.auxiliarybar .composite-bar > .monaco-action-bar .actions-container { justify-content: center; gap: 10px; }
+.monaco-workbench .part.sidebar .composite-bar .action-item .action-label { border-radius: 8px; }
+.monaco-workbench .part.statusbar { font-size: 11px; }

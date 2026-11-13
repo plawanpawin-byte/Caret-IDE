@@ -16,7 +16,12 @@ async function recent() {
   } catch { return []; }
 }
 
-async function show(ctx) {
+async function send(chat) {
+  if (!panel) return;
+  panel.webview.postMessage({ type: 'state', account: chat.account, items: await recent() });
+}
+
+async function show(ctx, chat) {
   if (panel) { panel.reveal(); return; }
   const media = vscode.Uri.joinPath(ctx.extensionUri, 'media');
   panel = vscode.window.createWebviewPanel('caret.welcome', 'Welcome', vscode.ViewColumn.One, { enableScripts: true, localResourceRoots: [media] });
@@ -29,11 +34,11 @@ async function show(ctx) {
 <script nonce="${nonce}" src="${u('welcome.js')}"></script></body></html>`;
   w.onDidReceiveMessage(async m => {
     switch (m?.type) {
-      case 'ready': w.postMessage({ type: 'recent', items: await recent() }); break;
+      case 'ready': send(chat); break;
       case 'openFolder': vscode.commands.executeCommand('workbench.action.files.openFolder'); break;
       case 'clone': vscode.commands.executeCommand('git.clone'); break;
       case 'newFile': vscode.commands.executeCommand('workbench.action.files.newUntitledFile'); break;
-      case 'login': vscode.commands.executeCommand('caret.signIn'); break;
+      case 'login': chat.login(); break;
       case 'open': if (typeof m.uri === 'string') vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.parse(m.uri)); break;
     }
   });
@@ -45,4 +50,4 @@ function closeStock() {
   if (stock.length) vscode.window.tabGroups.close(stock).then(undefined, () => {});
 }
 
-module.exports = { show, closeStock };
+module.exports = { show, closeStock, refresh: send };

@@ -36,6 +36,7 @@ fs.renameSync(path.join(OUT, 'bin', 'codium-tunnel.exe'), path.join(OUT, 'bin', 
 step('product.json');
 const pj = path.join(OUT, 'resources', 'app', 'product.json');
 const p = JSON.parse(fs.readFileSync(pj, 'utf8'));
+delete p.checksums; // we change workbench files on purpose, so the stock checksum check would cry "corrupt"
 Object.assign(p, {
   nameShort: 'Caret IDE', nameLong: 'Caret IDE', applicationName: 'caret-ide',
   dataFolderName: '.caret-ide', sharedDataFolderName: '.caret-ide-shared',
@@ -48,7 +49,7 @@ Object.assign(p, {
   updateUrl: '', // updates arrive as new installers for now
   configurationDefaults: {
     ...(p.configurationDefaults || {}),
-    'workbench.colorTheme': 'Caret Dark',
+    'workbench.colorTheme': 'Carnet Dark',
     'telemetry.telemetryLevel': 'off',
     'update.mode': 'none',
     'workbench.startupEditor': 'none',
@@ -87,6 +88,12 @@ step('window icon');
     if (!fs.existsSync(d)) continue;
     for (const n of fs.readdirSync(d)) if (/^letterpress-(dark|light|hcDark|hcLight)\.svg$/.test(n)) fs.writeFileSync(path.join(d, n), dim);
   }
+}
+
+step('look');
+{
+  const css = path.join(OUT, 'resources', 'app', 'out', 'vs', 'workbench', 'workbench.desktop.main.css');
+  fs.appendFileSync(css, '\n' + fs.readFileSync(path.join(ROOT, 'brand', 'overrides.css'), 'utf8'));
 }
 
 step('icon and version');

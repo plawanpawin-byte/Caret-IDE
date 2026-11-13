@@ -13,13 +13,13 @@
   "contributes": {
     "themes": [
       {
-        "label": "Caret Dark",
+        "label": "Carnet Dark",
         "uiTheme": "vs-dark",
         "path": "./themes/caret-dark-color-theme.json"
       }
     ],
     "configurationDefaults": {
-      "workbench.colorTheme": "Caret Dark",
+      "workbench.colorTheme": "Carnet Dark",
       "workbench.activityBar.location": "top",
       "workbench.startupEditor": "none",
       "editor.minimap.enabled": false,
@@ -32,6 +32,9 @@
       "git.autofetch": true,
       "git.confirmSync": false,
       "window.commandCenter": true,
+      "window.menuBarVisibility": "compact",
+      "workbench.experimental.modernUI": true,
+      "workbench.experimental.floatingPanels": true,
       "chat.disableAIFeatures": true
     }
   }

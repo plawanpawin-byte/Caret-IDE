@@ -35,6 +35,7 @@ class Chat {
     }
     this.push();
   }
+  changed() { try { this.onAccount?.(); } catch {} }
   async clearAccount() {
     this.account = null;
     await this.ctx.secrets.delete('caret.token');
@@ -72,7 +73,7 @@ class Chat {
       case 'stop': this.run?.stop(); break;
       case 'newChat': this.session = null; await this.ctx.workspaceState.update('caret.session', undefined); this.post({ type: 'cleared' }); break;
       case 'login': await this.login(); break;
-      case 'logout': { const t = await this.ctx.secrets.get('caret.token'); if (t) await auth.logout(t); await this.clearAccount(); this.push(); break; }
+      case 'logout': { const t = await this.ctx.secrets.get('caret.token'); if (t) await auth.logout(t); await this.clearAccount(); this.push(); this.changed(); break; }
       case 'setModel': if (MODELS.some(x => x.id === m.id)) await this.ctx.globalState.update('caret.model', m.id); break;
       case 'setMode': if (['plan', 'edit', 'auto'].includes(m.mode)) await this.ctx.globalState.update('caret.mode', m.mode); break;
       case 'openFile': this.openFile(String(m.path || '')); break;
@@ -85,7 +86,7 @@ class Chat {
       await this.ctx.secrets.store('caret.token', a.token);
       await this.ctx.globalState.update('caret.login', a.login);
       this.account = { login: a.login };
-      this.push();
+      this.push(); this.changed();
     } catch (e) { this.post({ type: 'error', text: String(e.message || e) }); this.push(); }
   }
 
@@ -146,14 +147,28 @@ function activate(ctx) {
     vscode.window.registerWebviewViewProvider('caret.chat', chat, { webviewOptions: { retainContextWhenHidden: true } }),
     vscode.commands.registerCommand('caret.openChat', () => vscode.commands.executeCommand('caret.chat.focus')),
     vscode.commands.registerCommand('caret.newChat', () => { chat.onMessage({ type: 'newChat' }); vscode.commands.executeCommand('caret.chat.focus'); }),
-    vscode.commands.registerCommand('caret.welcome', () => welcome.show(ctx)),
+    vscode.commands.registerCommand('caret.welcome', () => welcome.show(ctx, chat)),
     vscode.commands.registerCommand('caret.signIn', () => chat.login()),
     vscode.commands.registerCommand('caret.signOut', () => chat.onMessage({ type: 'logout' })),
   );
-  chat.init();
-  if (!vscode.workspace.workspaceFolders?.length) { welcome.show(ctx); setTimeout(welcome.closeStock, 2500); }
-  // first run: show the chat on the right
-  if (!ctx.globalState.get('caret.shown')) { ctx.globalState.update('caret.shown', true); setTimeout(() => vscode.commands.executeCommand('caret.chat.focus'), 1200); }
+  chat.onAccount = () => {
+    welcome.refresh(chat);
+    if (chat.account) {
+      vscode.commands.executeCommand('workbench.view.explorer');
+      vscode.commands.executeCommand('caret.chat.focus');
+      if (!vscode.workspace.workspaceFolders?.length) welcome.show(ctx, chat);
+    } else {
+      welcome.show(ctx, chat);
+      vscode.commands.executeCommand('workbench.action.closeSidebar');
+      vscode.commands.executeCommand('workbench.action.closeAuxiliaryBar');
+    }
+  };
+  chat.init().then(() => {
+    if (!chat.account || !vscode.workspace.workspaceFolders?.length) welcome.show(ctx, chat);
+    setTimeout(welcome.closeStock, 2500);
+    if (!chat.account) { vscode.commands.executeCommand('workbench.action.closeSidebar'); vscode.commands.executeCommand('workbench.action.closeAuxiliaryBar'); }
+    else setTimeout(() => vscode.commands.executeCommand('caret.chat.focus'), 1200);
+  });
   // test hook for screenshots: CARET_DEV_OPEN_CHAT=1
   if (process.env.CARET_DEV_OPEN_CHAT) setTimeout(() => vscode.commands.executeCommand('caret.chat.focus'), 1500);
 }
