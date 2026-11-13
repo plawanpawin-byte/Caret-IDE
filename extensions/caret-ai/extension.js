@@ -149,6 +149,8 @@ function activate(ctx) {
     vscode.commands.registerCommand('caret.signOut', () => chat.onMessage({ type: 'logout' })),
   );
   chat.init();
+  // first run: show the chat on the right
+  if (!ctx.globalState.get('caret.shown')) { ctx.globalState.update('caret.shown', true); setTimeout(() => vscode.commands.executeCommand('caret.chat.focus'), 1200); }
   // test hook for screenshots: CARET_DEV_OPEN_CHAT=1
   if (process.env.CARET_DEV_OPEN_CHAT) setTimeout(() => vscode.commands.executeCommand('caret.chat.focus'), 1500);
 }

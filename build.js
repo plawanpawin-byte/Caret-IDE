@@ -73,6 +73,16 @@ for (const name of fs.readdirSync(path.join(ROOT, 'extensions'))) {
   if (fs.statSync(from).isDirectory()) fs.cpSync(from, path.join(extDir, name), { recursive: true });
 }
 
+step('window icon');
+{
+  const b64 = fs.readFileSync(path.join(ROOT, 'brand', 'icon.png')).toString('base64');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256"><image width="256" height="256" href="data:image/png;base64,${b64}"/></svg>`;
+  for (const f of ['out/media/code-icon.svg', 'out/vs/workbench/browser/media/code-icon.svg']) {
+    const t = path.join(OUT, 'resources', 'app', f);
+    if (fs.existsSync(t)) fs.writeFileSync(t, svg);
+  }
+}
+
 step('icon and version');
 if (fs.existsSync(RCEDIT) && fs.existsSync(ICON)) {
   const r = spawnSync(RCEDIT, [path.join(OUT, EXE), '--set-icon', ICON,

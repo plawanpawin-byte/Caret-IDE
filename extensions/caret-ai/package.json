@@ -9,7 +9,7 @@
   "activationEvents": ["onStartupFinished"],
   "contributes": {
     "viewsContainers": {
-      "activitybar": [{ "id": "caret", "title": "Caret AI", "icon": "media/caret.svg" }]
+      "secondarySidebar": [{ "id": "caret", "title": "Caret AI", "icon": "media/caret.svg" }]
     },
     "views": {
       "caret": [{ "type": "webview", "id": "caret.chat", "name": "Caret AI" }]
