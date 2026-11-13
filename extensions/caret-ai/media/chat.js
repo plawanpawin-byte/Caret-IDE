@@ -45,9 +45,39 @@
 
   const feed = h('div', { class: 'feed' });
   const input = h('textarea', { rows: 1, placeholder: 'Plan, build, ask anything' });
-  const modelSel = h('select', { class: 'plain', title: 'Model', onchange: e => { S.last = e.target.value; vscode.postMessage({ type: 'setModel', id: S.last }); } });
-  const modeSel = h('select', { class: 'pill', title: 'Plan: a task list, no changes. Code: writes the code. Agent: like Code, with the work split between sub-agents.', onchange: e => { S.mode = e.target.value; vscode.postMessage({ type: 'setMode', mode: S.mode }); } },
-    h('option', { value: 'plan', text: 'Plan' }), h('option', { value: 'code', text: 'Code' }), h('option', { value: 'agent', text: 'Agent' }));
+  // A round-cornered menu instead of the system <select> (whose popup is square and cannot be styled).
+  const CHEV = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+  const openMenus = new Set();
+  const closeMenus = except => { for (const m of openMenus) if (m !== except) m.close(); };
+  document.addEventListener('click', e => { for (const m of openMenus) if (!m.el.contains(e.target)) m.close(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenus(); });
+  function dropdown({ cls, title, onpick }) {
+    let items = [], value = '';
+    const btn = h('button', { class: 'dd ' + cls, type: 'button', title: title || '' });
+    const pop = h('div', { class: 'pop', role: 'listbox', hidden: '' });
+    const el = h('div', { class: 'ddw' }, btn, pop);
+    const api = { el, close() { pop.hidden = true; openMenus.delete(api); } };
+    const paint = () => {
+      const cur = items.find(i => i.value === value) || items[0];
+      btn.replaceChildren(h('span', { text: cur ? cur.label : '' }));
+      btn.insertAdjacentHTML('beforeend', CHEV);
+      pop.replaceChildren(...items.map(i => h('button', { class: 'opt' + (i.value === value ? ' sel' : ''), type: 'button', role: 'option', onclick: () => { value = i.value; api.close(); paint(); onpick(i.value); } },
+        h('span', { class: 'ol' }, h('span', { class: 'on', text: i.label }), i.desc ? h('span', { class: 'od', text: i.desc }) : null),
+        h('span', { class: 'ck', text: i.value === value ? '\u2713' : '' }))));
+    };
+    btn.addEventListener('click', e => { e.stopPropagation(); const open = pop.hidden; closeMenus(api); pop.hidden = !open; if (open) openMenus.add(api); else openMenus.delete(api); });
+    Object.defineProperty(el, 'value', { get: () => value, set: v => { value = v; paint(); } });
+    el.setItems = list => { items = list; paint(); };
+    return el;
+  }
+  const modelSel = dropdown({ cls: 'plain', title: 'Model', onpick: v => { S.last = v; vscode.postMessage({ type: 'setModel', id: v }); } });
+  const modeSel = dropdown({ cls: 'pill', title: 'How the AI works', onpick: v => { S.mode = v; vscode.postMessage({ type: 'setMode', mode: v }); } });
+  modeSel.setItems([
+    { value: 'plan', label: 'Plan', desc: 'Makes a task list. Changes nothing.' },
+    { value: 'code', label: 'Code', desc: 'Writes the code and edits files.' },
+    { value: 'agent', label: 'Agent', desc: 'Like Code, with the work split between sub-agents.' },
+  ]);
+  modeSel.value = 'code';
   const SHIELD = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V6z"/></svg>';
   const fullBtn = h('button', { class: 'fullbtn', title: 'Full access: accept everything without asking (writing files, running commands, switching from Plan to Code). Use it in folders you trust.', onclick: () => { S.full = !S.full; vscode.postMessage({ type: 'setFull', full: S.full }); build(); } });
   fullBtn.innerHTML = SHIELD + '<span>Full access</span>';
@@ -74,7 +104,8 @@
         feed, note, composer);
       if (!feed.childElementCount) hello();
     }
-    modelSel.replaceChildren(...S.models.map(m => h('option', { value: m.id, text: m.label, selected: m.id === S.last })));
+    modelSel.setItems(S.models.map(m => ({ value: m.id, label: m.label })));
+    modelSel.value = S.last;
     modeSel.value = S.mode;
     fullBtn.classList.toggle('on', !!S.full);
     sendBtn.innerHTML = S.busy ? STOP : SEND; sendBtn.classList.toggle('empty', !S.busy && !input.value.trim() && !pending.length); sendBtn.title = S.busy ? 'Stop' : 'Send (Enter)';

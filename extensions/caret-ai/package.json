@@ -6,6 +6,7 @@
   "publisher": "caret",
   "engines": { "vscode": "^1.90.0" },
   "main": "./extension.js",
+  "capabilities": { "untrustedWorkspaces": { "supported": "limited", "description": "In a folder you have not trusted, Caret AI works but Full access is switched off." }, "virtualWorkspaces": true },
   "activationEvents": ["onStartupFinished"],
   "contributes": {
     "viewsContainers": {

@@ -156,6 +156,8 @@ class Chat {
     if (!text) return;
     const pick = MODELS.find(x => x.id === m.model) || MODELS[0];
     const mode = MODES.includes(m.mode) ? m.mode : 'code';
+    const full = !!m.full && vscode.workspace.isTrusted;   // no Full access in a folder that is not trusted
+    if (m.full && !full) this.post({ type: 'error', text: 'This folder is not trusted, so Full access is off for this message. Trust the folder (the Restricted Mode badge at the bottom) to use it.' });
     if (!this.root) { this.post({ type: 'error', text: 'Open a folder first (File, Open Folder).' }); return; }
     // Pasted pictures go to a temporary folder; the tools read them from there.
     const files = [];
@@ -189,7 +191,7 @@ class Chat {
     };
     this.post({ type: 'start' });
     try {
-      const rmode = mode === 'plan' ? 'plan' : (m.full ? 'auto' : 'edit');   // Full access: the tool asks for nothing
+      const rmode = mode === 'plan' ? 'plan' : (full ? 'auto' : 'edit');   // Full access: the tool asks for nothing
       this.run = pick.tool === 'codex' ? runCodex({ model: pick.model, mode: rmode, prompt, system, images: files, cwd: this.root, on })
         : runClaude({ model: pick.model, mode: rmode, prompt, system, sessionId: this.session, addDirs: files.length ? [path.dirname(files[0])] : [], cwd: this.root, on });
       this.push();
