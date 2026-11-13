@@ -81,6 +81,12 @@ step('window icon');
     const t = path.join(OUT, 'resources', 'app', f);
     if (fs.existsSync(t)) fs.writeFileSync(t, svg);
   }
+  const dim = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256"><image opacity="0.28" width="256" height="256" href="data:image/png;base64,${b64}"/></svg>`;
+  for (const f of ['out/media', 'out/vs/workbench/browser/parts/editor/media']) {
+    const d = path.join(OUT, 'resources', 'app', f);
+    if (!fs.existsSync(d)) continue;
+    for (const n of fs.readdirSync(d)) if (/^letterpress-(dark|light|hcDark|hcLight)\.svg$/.test(n)) fs.writeFileSync(path.join(d, n), dim);
+  }
 }
 
 step('icon and version');
