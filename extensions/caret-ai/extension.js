@@ -4,6 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 const auth = require('./lib/auth');
 const cli = require('./lib/cli');
+const welcome = require('./lib/welcome');
 const { runClaude, runCodex } = require('./lib/runners');
 
 const MODELS = [
@@ -145,10 +146,12 @@ function activate(ctx) {
     vscode.window.registerWebviewViewProvider('caret.chat', chat, { webviewOptions: { retainContextWhenHidden: true } }),
     vscode.commands.registerCommand('caret.openChat', () => vscode.commands.executeCommand('caret.chat.focus')),
     vscode.commands.registerCommand('caret.newChat', () => { chat.onMessage({ type: 'newChat' }); vscode.commands.executeCommand('caret.chat.focus'); }),
+    vscode.commands.registerCommand('caret.welcome', () => welcome.show(ctx)),
     vscode.commands.registerCommand('caret.signIn', () => chat.login()),
     vscode.commands.registerCommand('caret.signOut', () => chat.onMessage({ type: 'logout' })),
   );
   chat.init();
+  if (!vscode.workspace.workspaceFolders?.length) { welcome.show(ctx); setTimeout(welcome.closeStock, 2500); }
   // first run: show the chat on the right
   if (!ctx.globalState.get('caret.shown')) { ctx.globalState.update('caret.shown', true); setTimeout(() => vscode.commands.executeCommand('caret.chat.focus'), 1200); }
   // test hook for screenshots: CARET_DEV_OPEN_CHAT=1

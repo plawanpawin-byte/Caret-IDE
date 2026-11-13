@@ -1,0 +1,20 @@
+:root { --card: #171512; --card2: #1f1d19; --line: #2a2723; --text: #b8b5af; --hi: #ecebe8; --mute: #7d7a74; --faint: #55534f; }
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; background: #040200; color: var(--text); font: 13px/1.5 var(--vscode-font-family, "Segoe UI", system-ui, sans-serif); }
+.wrap { min-height: 100%; display: flex; flex-direction: column; align-items: center; padding: 9vh 24px 40px; }
+.logo { width: 132px; height: 132px; }
+h1 { margin: 6px 0 2px; font-size: 26px; font-weight: 300; letter-spacing: .02em; color: var(--hi); }
+.sub { color: var(--mute); margin: 0 0 30px; }
+.tiles { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; max-width: 720px; }
+.tile { width: 160px; display: flex; flex-direction: column; gap: 14px; text-align: left; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--hi); cursor: pointer; font: inherit; }
+.tile:hover { background: var(--card2); }
+.tile svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; opacity: .85; }
+.tile.main { background: #ecebe8; color: #0b0a09; border-color: #ecebe8; }
+.tile.main:hover { background: #fff; }
+.recent { width: 100%; max-width: 720px; margin-top: 34px; }
+.recent h2 { margin: 0 0 8px; font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--mute); }
+.item { display: flex; align-items: baseline; gap: 14px; width: 100%; padding: 7px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--hi); cursor: pointer; text-align: left; font: inherit; }
+.item:hover { background: var(--card); }
+.item .n { flex: none; }
+.item .d { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--faint); direction: rtl; text-align: right; }
+.none { color: var(--mute); padding: 7px 10px; }

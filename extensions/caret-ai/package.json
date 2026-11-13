@@ -15,6 +15,7 @@
       "caret": [{ "type": "webview", "id": "caret.chat", "name": "Caret AI" }]
     },
     "commands": [
+      { "command": "caret.welcome", "title": "Caret: Welcome" },
       { "command": "caret.openChat", "title": "Caret: Open Chat" },
       { "command": "caret.newChat", "title": "Caret: New Chat" },
       { "command": "caret.signIn", "title": "Caret: Log In" },
