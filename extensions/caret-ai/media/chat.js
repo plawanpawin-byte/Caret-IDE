@@ -98,8 +98,23 @@
   const composer = h('div', { class: 'composer' }, thumbs, input, h('div', { class: 'row' }, modeSel, modelSel, h('span', { class: 'grow' }), fullBtn, ctxBtn, sendBtn));
   const note = h('div', { class: 'note' });
 
+  // Agents window: the same chat with a sessions list on the left and the prompt box in the middle of an empty page.
+  const AG = !!document.body.dataset.agents;
+  const side = h('aside', { class: 'side' });
+  const stage = h('main', { class: 'stage' });
+  let sess = { list: [], cur: '' };
+  const ago = t => { const m = Math.max(1, Math.round((Date.now() - t) / 60000)); return m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' days ago'; };
+  function drawSide() {
+    const groups = new Map();
+    for (const c of sess.list) { const k = c.folder || 'No folder'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(c); }
+    side.replaceChildren(
+      h('button', { class: 'newsess', onclick: () => vscode.postMessage({ type: 'newSession' }) }, h('span', { text: '+ New Session' }), h('kbd', { text: 'Ctrl N' })),
+      h('div', { class: 'sh', text: 'Sessions' }),
+      ...(sess.list.length ? [...groups].flatMap(([k, items]) => [h('div', { class: 'grp', text: k }), ...items.map(c => h('button', { class: 'sitem' + (c.id === sess.cur ? ' on' : ''), title: c.title, onclick: () => vscode.postMessage({ type: 'openSession', id: c.id }) }, h('span', { class: 'st', text: c.title }), h('span', { class: 'sw', text: ago(c.at) })))]) : [h('div', { class: 'none', text: 'No sessions yet' })]));
+  }
   function hello() {
     const who = S.account?.login;
+    if (AG) { feed.replaceChildren(h('div', { class: 'hello' }, h('h1', { text: who ? `Let\u2019s ship something, ${who}` : 'Caret IDE' }), S.root ? h('div', { class: 'chips' }, h('span', { class: 'chip', text: S.root })) : h('p', { text: 'Open a folder to start (File, Open Folder).' }))); return; }
     feed.replaceChildren(h('div', { class: 'hello' }, h('img', { src: logo, alt: '' }),
       h('h1', { text: who ? `Hey ${who}, what should we build today?` : 'Caret IDE' }),
       S.root ? null : h('p', { text: 'Open a folder to start (File, Open Folder).' })));
@@ -107,7 +122,8 @@
 
   function build() {
     if (!app.contains(feed)) {
-      app.replaceChildren(
+      if (AG) { stage.replaceChildren(feed, note, composer); app.replaceChildren(side, stage); app.classList.add('agents'); drawSide(); new MutationObserver(() => stage.classList.toggle('empty', !!feed.querySelector('.hello'))).observe(feed, { childList: true }); }
+      else app.replaceChildren(
         feed, note, composer);
       if (!feed.childElementCount) hello();
     }
@@ -215,6 +231,7 @@
   window.addEventListener('message', ev => {
     const m = ev.data;
     if (m.type === 'state') { S = { ...S, ...m }; build(); return; }
+    if (m.type === 'sessions') { sess = { list: m.list || [], cur: m.cur || '' }; if (AG) drawSide(); return; }
     if (m.type === 'load') {
       feed.replaceChildren(); tools.clear(); todoCards.clear(); curAi = null; tasks = []; grp = null; runMode = 'code';
       for (const x of m.msgs || []) {

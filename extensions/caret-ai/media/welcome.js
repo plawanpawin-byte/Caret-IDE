@@ -45,6 +45,8 @@
         tile('Open project', 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', 'openFolder', true),
         tile('Clone repo', 'M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9', 'clone'),
         tile('New file', 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M12 12v5M9.5 14.5h5', 'newFile')),
+      h('div', { class: 'agentcard' }, h('div', {}, h('b', { text: 'Agents window' }), h('span', { class: 'new', text: 'New' })), h('p', { text: 'Run your AI tasks in their own window, with a list of sessions.' }),
+        h('button', { class: 'btn2 ghost', text: 'Try out the Agents window', onclick: () => vscode.postMessage({ type: 'openAgents' }) })),
       list));
   }
 
