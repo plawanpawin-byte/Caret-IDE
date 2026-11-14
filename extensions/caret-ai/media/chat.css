@@ -110,11 +110,19 @@ button, select, textarea { font: inherit; color: inherit; }
 @keyframes blink { 0%, 80%, 100% { opacity: .25; transform: scale(.8); } 40% { opacity: 1; transform: scale(1); } }
 .todo { margin: 10px 0; padding: 10px 12px; border: 1px solid #2a2a2a; border-radius: 12px; background: #151515; }
 .todo-h { color: #9a9a9a; font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase; margin-bottom: 6px; }
-.ti { display: flex; align-items: flex-start; gap: 9px; padding: 3px 0; color: #cfcfcf; }
-.ti .bx { flex: none; width: 13px; height: 13px; margin-top: 3px; border: 1.5px solid #5a5a5a; border-radius: 4px; }
-.ti.in_progress .bx { border-color: #f0b060; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; }
-.ti.completed { color: #7d7d7d; text-decoration: line-through; }
-.ti.completed .bx { background: #6bbf86; border-color: #6bbf86; }
+.ti { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 5px 0; color: #d4d2cc; }
+.ti .tx { min-width: 0; overflow-wrap: anywhere; }
+.ti .bx { flex: none; position: relative; width: 16px; height: 16px; border: 1.5px dashed #555; border-radius: 50%; }
+.ti .bx i { display: none; }
+.ti.in_progress .bx { border: 1.5px solid #3a3a3a; border-top-color: #e9e7e2; animation: spin .9s linear infinite; }
+.ti.completed { color: #8a8a8a; }
+.ti.completed .bx { border: 0; background: #6bbf86; }
+.ti.completed .bx i { display: block; position: absolute; left: 5px; top: 2.5px; width: 4px; height: 8px; border: solid #0b0b0b; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.tgroup { margin: 6px 0; }
+.tgroup > summary { cursor: pointer; list-style: none; color: var(--mute); font-size: 12.5px; }
+.tgroup > summary::-webkit-details-marker { display: none; }
+
+
 @keyframes spin { to { transform: rotate(360deg); } }
 .thought { margin: 6px 0; color: #7d7d7d; font-size: 12.5px; }
 .thought summary { cursor: pointer; list-style: none; }
@@ -123,3 +131,6 @@ button, select, textarea { font: inherit; color: inherit; }
 
 .msg.ai ul.md, .msg.ai ol.md { margin: 6px 0; padding-left: 20px; }
 .msg.ai .md li { margin: 3px 0; }
+
+.tgroup > summary::after { content: ' ›'; }
+.tgroup[open] > summary::after { content: ' ⌄'; }

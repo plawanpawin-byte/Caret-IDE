@@ -18,9 +18,9 @@ const MODELS = [
 ];
 const MODES = ['plan', 'code', 'agent'];
 const MODE_NOTE = {
-  plan: 'PLAN MODE. Do not change any file and do not run anything that changes the project. Do not write a plan file. If the request is a job to do, reply with the tasks that would get it done, one line per task, each line starting with `[ ] ` (nothing else about the list), and do not start the work. If it is only a question or a chat, just answer it normally and write no `[ ]` lines.',
-  code: 'TASK LIST. When the job has two or more steps, FIRST write the list in one short message, one line per task, each line starting with `[ ] `. Then, right after you finish a task, write one line `[x] ` followed by the same task text. Write nothing else about the list. For a simple question or a one-step job, skip the list.',
-  agent: 'TASK LIST. When the job has two or more steps, FIRST write the list in one short message, one line per task, each line starting with `[ ] `. Then, right after you finish a task, write one line `[x] ` followed by the same task text. Write nothing else about the list. For a simple question or a one-step job, skip the list. AGENT MODE. Split the work into independent sub-tasks, give each to its own sub-agent (the Task tool) and combine their results. Keep the plan short.',
+  plan: 'PLAN MODE. Do not change any file and do not run anything that changes the project. Do not write a plan file. If the request is a job to do, reply with the tasks that would get it done, one line per task, each line starting with `[ ] ` (3 to 7 short tasks, nothing else about the list), and do not start the work. If it is only a question or a chat, just answer it normally and write no `[ ]` lines.',
+  code: 'TASK LIST (required). For any job that builds or changes files, your FIRST message, before any tool call, is the task list: 3 to 7 short tasks, one line each, each line starting with `[ ] `. Then do the tasks one at a time, in order. Right after you finish a task, write one line `[x] ` followed by the same task text. Write nothing else about the list. Only a plain question or a one-line fix may skip the list.',
+  agent: 'TASK LIST (required). For any job that builds or changes files, your FIRST message, before any tool call, is the task list: 3 to 7 short independent tasks, one line each, each line starting with `[ ] `. AGENT MODE: do NOT work through the tasks one by one. Start one sub-agent (the Task tool) per task, all in the same message so they run in parallel, and tell each exactly what to do. When a sub-agent returns, write one line `[x] ` followed by the same task text. Write nothing else about the list. Only a plain question or a one-line fix may skip the list.',
 };
 const IMG_RE = /^data:image\/(png|jpeg|webp|gif);base64,([A-Za-z0-9+/=]+)$/;
 const SYSTEM = 'You are the coding assistant inside Caret IDE, working in the open folder. Be direct and concise. Make the change when asked; say what you changed in one or two sentences.';
@@ -28,7 +28,8 @@ const SYSTEM = 'You are the coding assistant inside Caret IDE, working in the op
 class Chat {
   constructor(ctx) {
     this.ctx = ctx; this.view = null; this.run = null; this.account = null;
-    this.chats = ctx.workspaceState.get('caret.chats') || [];
+    this.chats = ctx.globalState.get('caret.allchats') || [];
+    this.pending = ctx.globalState.get('caret.pendingChat') || null;
     this.cur = this.blank();
     this.root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || null;
   }
@@ -43,7 +44,21 @@ class Chat {
       if (me === null) await this.clearAccount();
       else if (me) { this.account = { login: me.login }; await this.ctx.globalState.update('caret.login', me.login); }
     }
-    this.push();
+    this.migrate();
+    this.push(); this.applyPending();
+  }
+  async migrate() {
+    const old = this.ctx.workspaceState.get('caret.chats');
+    if (!old || !old.length || !this.root) return;
+    for (const c of old) if (!this.chats.some(x => x.id === c.id)) this.chats.push({ ...c, root: this.root });
+    await this.ctx.workspaceState.update('caret.chats', undefined);
+    await this.ctx.globalState.update('caret.allchats', this.chats);
+  }
+  applyPending() {
+    if (!this.pending || !this.view) return;
+    const c = this.chats.find(x => x.id === this.pending);
+    this.pending = null; this.ctx.globalState.update('caret.pendingChat', undefined);
+    if (c) { this.cur = c; this.post({ type: 'load', msgs: c.msgs }); this.titleNow(); }
   }
   changed() { try { this.onAccount?.(); } catch {} }
   async clearAccount() {
@@ -66,22 +81,38 @@ class Chat {
   async save() {
     if (!this.cur.msgs.length) return;
     this.cur.at = Date.now();
-    this.chats = [this.cur, ...this.chats.filter(c => c.id !== this.cur.id)].slice(0, 40);
-    await this.ctx.workspaceState.update('caret.chats', this.chats);
+    this.cur.root = this.root; this.cur.folder = this.root ? path.basename(this.root) : '';
+    this.chats = [this.cur, ...this.chats.filter(c => c.id !== this.cur.id)].slice(0, 200);
+    await this.ctx.globalState.update('caret.allchats', this.chats);
   }
   async newChat() {
     await this.save();
     this.cur = this.blank();
     this.post({ type: 'cleared' }); this.titleNow();
   }
+  // History is grouped by folder (small grey folder names). Picking a chat from another folder opens that folder and the chat.
   async history() {
     await this.save();
     if (!this.chats.length) { vscode.window.showInformationMessage('No chats yet.'); return; }
     const ago = t => { const m = Math.max(1, Math.round((Date.now() - t) / 60000)); return m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' days ago'; };
-    const pick = await vscode.window.showQuickPick(this.chats.map(c => ({ label: c.title || 'Chat', description: ago(c.at), id: c.id })), { placeHolder: 'Chat history' });
-    if (!pick) return;
+    const groups = new Map();
+    for (const c of this.chats) { const k = c.root || ''; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(c); }
+    const keys = [...groups.keys()].sort((a, b) => (b === this.root) - (a === this.root) || groups.get(b)[0].at - groups.get(a)[0].at);
+    const items = [];
+    for (const k of keys) {
+      items.push({ label: k ? path.basename(k) : 'No folder', kind: vscode.QuickPickItemKind.Separator });
+      for (const c of groups.get(k)) items.push({ label: c.title || 'Chat', description: ago(c.at), id: c.id });
+    }
+    const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Chat history' });
+    if (!pick || !pick.id || this.run) return;
     const c = this.chats.find(x => x.id === pick.id);
-    if (!c || this.run) return;
+    if (!c) return;
+    if (c.root && c.root !== this.root) {
+      if (!fs.existsSync(c.root)) { vscode.window.showWarningMessage('That folder no longer exists: ' + c.root); return; }
+      await this.ctx.globalState.update('caret.pendingChat', c.id);
+      await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(c.root), { forceNewWindow: false });
+      return;
+    }
     this.cur = c; this.post({ type: 'load', msgs: c.msgs }); this.titleNow();
   }
   push() { this.post(this.state()); }
@@ -103,7 +134,7 @@ class Chat {
 
   async onMessage(m) {
     switch (m?.type) {
-      case 'ready': this.push(); break;
+      case 'ready': this.push(); this.applyPending(); break;
       case 'send': await this.send(m); break;
       case 'stop': this.run?.stop(); break;
       case 'newChat': await this.newChat(); break;
@@ -187,7 +218,7 @@ class Chat {
       thinking: t => this.post({ type: 'thinking', text: String(t).slice(0, 4000) }),
       file: f => this.post({ type: 'file', path: path.isAbsolute(f) && this.root ? path.relative(this.root, f) : f }),
     };
-    this.post({ type: 'start' });
+    this.post({ type: 'start', mode });
     try {
       const rmode = mode === 'plan' ? 'plan' : (full ? 'auto' : 'edit');   // Full access: the tool asks for nothing
       this.run = pick.tool === 'codex' ? runCodex({ model: pick.model, mode: rmode, prompt, system, images: files, cwd: this.root, on })
