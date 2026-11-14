@@ -90,15 +90,6 @@ function resolveNpm() {
   return IS_WIN ? resolveCli('npm') : { cmd: found, args: [] };
 }
 
-function findOllama() {
-  const r = resolveCli('ollama');
-  if (r) return r.cmd;
-  const guesses = IS_WIN
-    ? [path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Ollama', 'ollama.exe')]
-    : ['/Applications/Ollama.app/Contents/Resources/ollama', '/usr/local/bin/ollama', '/usr/bin/ollama'];
-  return guesses.find(g => g && fs.existsSync(g)) || null;
-}
-
 function clearCache() { cache.clear(); }
 
-module.exports = { fixPath, which, resolveCli, resolveNpm, findOllama, clearCache, IS_WIN };
+module.exports = { fixPath, which, resolveCli, resolveNpm, clearCache, IS_WIN };
