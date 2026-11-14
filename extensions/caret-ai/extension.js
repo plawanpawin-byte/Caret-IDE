@@ -14,10 +14,6 @@ const aeble = require('./lib/aeble');
 
 // tool: which command-line tool runs it; model: the name handed to that tool.
 const MODELS = [
-  { id: 'sonnet-5-5', label: 'Sonnet 5.5', tool: 'claude', model: 'claude-sonnet-5-5' },
-  { id: 'haiku-5-5', label: 'Haiku 5.5', tool: 'claude', model: 'claude-haiku-5-5' },
-  { id: 'opus-5-5', label: 'Opus 5.5', tool: 'claude', model: 'claude-opus-5-5' },
-  { id: 'fable-5-2', label: 'Fable 5.2', tool: 'claude', model: 'claude-fable-5-2' },
   // Aeble runs on the user's own computer (Ollama). Both are always listed; the one that suits this computer's RAM is marked.
   ...aeble.AEBLE.map(a => ({ id: a.id, label: a.label, tool: 'local', model: a.id, desc: a.desc })),
 ];
@@ -76,7 +72,7 @@ class Chat {
     return {
       type: 'state', account: this.account, models: MODELS.map(m => (m.tool === 'local' && aeble.recommended().id === m.id ? { ...m, desc: m.desc + ' Best for this computer.' } : m)), root: this.root ? path.basename(this.root) : null,
       tools: { claude: !!cli.resolveCli('claude'), codex: !!cli.resolveCli('codex') },
-      busy: !!this.run, last: MODELS.some(m => m.id === this.ctx.globalState.get('caret.model')) ? this.ctx.globalState.get('caret.model') : (cli.resolveCli('claude') ? MODELS[0].id : aeble.recommended().id), mode: MODES.includes(this.ctx.globalState.get('caret.mode')) ? this.ctx.globalState.get('caret.mode') : 'code', full: !!this.ctx.globalState.get('caret.full'),
+      busy: !!this.run, last: MODELS.some(m => m.id === this.ctx.globalState.get('caret.model')) ? this.ctx.globalState.get('caret.model') : aeble.recommended().id, mode: MODES.includes(this.ctx.globalState.get('caret.mode')) ? this.ctx.globalState.get('caret.mode') : 'code', full: !!this.ctx.globalState.get('caret.full'),
     };
   }
   blank() { return { id: Date.now().toString(36), title: '', session: null, at: Date.now(), msgs: [], hist: [] }; }
