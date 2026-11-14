@@ -47,7 +47,8 @@ function runLocal(opts) {
         compact(messages, budget);
         let turn;
         try {
-          turn = await openrouter.chat({ key: opts.key, model: opts.model, messages, tools: defs, signal: abort.signal, onEvent: ev => { if (ev.type === 'text') on.text(ev.text); else on.thinking && on.thinking(ev.text); } });
+          turn = await openrouter.chat({ key: opts.key, model: opts.model, messages, tools: defs, signal: abort.signal, onEvent: ev => { if (ev.type !== 'text') on.thinking && on.thinking(ev.text); } });
+          if (turn.content.trim()) on.text(turn.content.trim());   // one message per turn: the chat puts every text event in its own paragraph
         } catch (e) {
           if (abort.signal.aborted) return;
           // A small model sometimes writes a tool call the server cannot read. Ask it to try again.
