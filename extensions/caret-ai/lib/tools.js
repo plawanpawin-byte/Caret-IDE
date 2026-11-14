@@ -86,14 +86,22 @@ function runShell(command, cwd, signal) {
   return new Promise(resolve => {
     const win = process.platform === 'win32';
     // On Windows the command goes to cmd.exe word for word (windowsVerbatimArguments), otherwise quotes inside it get mangled.
-    const p = spawn(win ? 'cmd.exe' : 'sh', win ? ['/d', '/s', '/c', '"' + command + '"'] : ['-c', command], { cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], windowsVerbatimArguments: win });
+    const p = spawn(win ? 'cmd.exe' : 'sh', win ? ['/d', '/s', '/c', '"' + command + '"'] : ['-c', command], { cwd, detached: !win, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], windowsVerbatimArguments: win });
     let out = '', done = false;
     const add = d => { out += d; if (out.length > 20000) out = out.slice(0, 8000) + '\n…\n' + out.slice(-8000); };
     p.stdout.on('data', add); p.stderr.on('data', add);
-    const kill = () => { if (win) execFile('taskkill', ['/PID', String(p.pid), '/T', '/F'], { windowsHide: true }, () => {}); else try { p.kill('SIGKILL'); } catch {} };
-    const timer = setTimeout(() => { if (!done) { out += '\n[stopped after 60 seconds]'; kill(); } }, 60000);
-    if (signal) signal.addEventListener('abort', kill, { once: true });
-    const finish = code => { if (done) return; done = true; clearTimeout(timer); resolve(out.trim() + `\n[exit code ${code}]`); };
+    const kill = () => { if (win) execFile('taskkill', ['/PID', String(p.pid), '/T', '/F'], { windowsHide: true }, () => {}); else try { process.kill(-p.pid, 'SIGKILL'); } catch { try { p.kill('SIGKILL'); } catch {} } };
+    const finish = code => { if (done) return; done = true; clearTimeout(timer); clearInterval(idle); resolve(out.trim() + (typeof code === 'number' ? `\n[exit code ${code}]` : code)); };
+    // A server or watcher never exits: after 12 seconds without new output (or 90 seconds in all) hand back what it printed
+    // and leave it running, so the AI can go on (test it, fix the code). Stop kills it while the run is going.
+    let last = Date.now(); const start = Date.now();
+    const idle = setInterval(() => {
+      if (done) return;
+      if (Date.now() - last > 12000 || Date.now() - start > 90000) finish(`\n[still running in the background, pid ${p.pid}. The command was not waited for. To stop it: ${win ? 'taskkill /PID ' + p.pid + ' /T /F' : 'kill ' + p.pid}]`);
+    }, 1000);
+    const timer = setTimeout(() => {}, 0);
+    if (signal) signal.addEventListener('abort', () => { kill(); finish('\n[stopped by the user]'); }, { once: true });
+    p.stdout.on('data', () => { last = Date.now(); }); p.stderr.on('data', () => { last = Date.now(); });
     p.on('error', e => { out += String(e.message); finish(1); });
     p.on('close', code => finish(code));
   });
