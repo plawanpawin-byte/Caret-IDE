@@ -90,6 +90,10 @@ button, select, textarea { font: inherit; color: inherit; }
 .opt .on { color: var(--hi); font-size: 13px; }
 .opt .od { color: var(--mute); font-size: 11.5px; line-height: 1.35; }
 .opt .ck { color: var(--hi); width: 14px; text-align: center; flex: none; }
+.opt .onr { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.opt .badge { font-size: 10.5px; line-height: 1; color: var(--mute); background: #ffffff12; border-radius: 999px; padding: 3px 8px; white-space: nowrap; }
+.opt .ckn { display: flex; align-items: center; gap: 12px; flex: none; }
+.opt .num { color: var(--mute); width: 10px; text-align: right; font-size: 12px; }
 
 .row { flex-wrap: nowrap; gap: 4px; }
 .row .grow { flex: 1; min-width: 0; }

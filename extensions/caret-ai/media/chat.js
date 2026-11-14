@@ -68,9 +68,9 @@
       const cur = items.find(i => i.value === value) || items[0];
       btn.replaceChildren(h('span', { text: cur ? cur.label : '' }));
       btn.insertAdjacentHTML('beforeend', CHEV);
-      pop.replaceChildren(...items.map(i => h('button', { class: 'opt' + (i.value === value ? ' sel' : ''), type: 'button', role: 'option', onclick: () => { value = i.value; api.close(); paint(); onpick(i.value); } },
-        h('span', { class: 'ol' }, h('span', { class: 'on', text: i.label }), i.desc ? h('span', { class: 'od', text: i.desc }) : null),
-        h('span', { class: 'ck', text: i.value === value ? '\u2713' : '' }))));
+      pop.replaceChildren(...items.map((i, n) => h('button', { class: 'opt' + (i.value === value ? ' sel' : ''), type: 'button', role: 'option', title: i.compact ? (i.desc || '') : '', onclick: () => { value = i.value; api.close(); paint(); onpick(i.value); } },
+        h('span', { class: 'ol' }, h('span', { class: 'onr' }, h('span', { class: 'on', text: i.label }), i.badge ? h('span', { class: 'badge', text: i.badge }) : null), i.desc && !i.compact ? h('span', { class: 'od', text: i.desc }) : null),
+        h('span', { class: 'ckn' }, h('span', { class: 'ck', text: i.value === value ? '\u2713' : '' }), i.compact ? h('span', { class: 'num', text: String(n + 1) }) : null))));
     };
     btn.addEventListener('click', e => { e.stopPropagation(); const open = pop.hidden; closeMenus(api); pop.hidden = !open; if (open) openMenus.add(api); else openMenus.delete(api); });
     Object.defineProperty(el, 'value', { get: () => value, set: v => { value = v; paint(); } });
@@ -111,14 +111,15 @@
         feed, note, composer);
       if (!feed.childElementCount) hello();
     }
-    modelSel.setItems(S.models.map(m => ({ value: m.id, label: m.label, desc: m.desc })));
+    modelSel.setItems(S.models.map(m => ({ value: m.id, label: m.label, desc: m.desc, compact: true, badge: m.best ? 'Recommended' : null })));
     modelSel.value = S.last;
     modeSel.value = S.mode;
     fullBtn.classList.toggle('on', !!S.full);
     sendBtn.innerHTML = S.busy ? STOP : SEND; sendBtn.classList.toggle('empty', !S.busy && !input.value.trim() && !pending.length); sendBtn.title = S.busy ? 'Stop' : 'Send (Enter)';
-    // OpenRouter: the user signs in once and pays for paid models from their own credits. Free models need no credits.
-    if (!(S.or && S.or.connected)) note.replaceChildren(h('button', { class: 'btn', text: 'Sign in with OpenRouter', title: 'Opens your browser. Free models work right after sign-in.', onclick: () => vscode.postMessage({ type: 'signInOR' }) }));
-    else note.replaceChildren(h('span', {}, 'OpenRouter connected. '), h('a', { text: 'Add credits', title: 'Opens OpenRouter in your browser', onclick: () => vscode.postMessage({ type: 'addCredits' }) }), h('span', { text: ' · ' }), h('a', { text: 'Sign out', onclick: () => vscode.postMessage({ type: 'signOutOR' }) }));
+    const missing = [];
+    const curM = S.models.find(m => m.id === S.last);
+    if (!S.tools.claude && (!curM || curM.tool === 'claude')) missing.push('Claude Code');
+    note.replaceChildren(...(missing.length ? [h('span', {}, h('b', { text: 'Claude Code' }), ' was not found. Install it (npm i -g @anthropic-ai/claude-code) and sign in with it.')] : []));
   }
 
   function scroll() { feed.scrollTop = feed.scrollHeight; }

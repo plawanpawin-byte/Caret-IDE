@@ -8,11 +8,15 @@ const auth = require('./lib/auth');
 const cli = require('./lib/cli');
 const welcome = require('./lib/welcome');
 const { runClaude, runCodex } = require('./lib/runners');
-const openrouter = require('./lib/openrouter');
-const { runAgent } = require('./lib/agent');
+const { runLocal } = require('./lib/local');
+const ollama = require('./lib/ollama');
+const aeble = require('./lib/aeble');
 
-// The model list comes from OpenRouter (filled in by loadModels). tool: how it runs; model: the name handed to it.
-const MODELS = [];
+// tool: which command-line tool runs it; model: the name handed to that tool.
+const MODELS = [
+  // Aeble runs on the user's own computer (Ollama). Both are always listed; the one that suits this computer's RAM is marked.
+  ...aeble.AEBLE.map(a => ({ id: a.id, label: a.label, tool: 'local', model: a.id, desc: a.desc })),
+];
 const MODES = ['plan', 'code', 'agent'];
 const MODE_NOTE = {
   plan: 'PLAN MODE. Do not change any file and do not run anything that changes the project. Do not write a plan file. If the request is a job to do, reply with the tasks that would get it done, one line per task, each line starting with `[ ] ` (3 to 7 short tasks, nothing else about the list), and do not start the work. If it is only a question or a chat, just answer it normally and write no `[ ]` lines.',
@@ -41,26 +45,9 @@ class Chat {
       if (me === null) await this.clearAccount();
       else if (me) { this.account = { login: me.login }; await this.ctx.globalState.update('caret.login', me.login); }
     }
-    this.orKey = await this.ctx.secrets.get('caret.orkey');
     this.migrate();
     this.push(); this.applyPending();
-    this.loadModels();
   }
-  async loadModels() {
-    try { const list = await openrouter.models(); MODELS.length = 0; MODELS.push(...list); }
-    catch (e) { this.post({ type: 'error', text: 'Could not load the model list. Check your internet connection.' }); }
-    this.push();
-  }
-  // Opens the browser so the user can sign in to OpenRouter; their own key comes back and is kept in the secret store.
-  async signInOR() {
-    try {
-      const key = await openrouter.signIn(u => vscode.env.openExternal(vscode.Uri.parse(u)));
-      this.orKey = key; await this.ctx.secrets.store('caret.orkey', key);
-      vscode.window.showInformationMessage('Signed in to OpenRouter. Free models work right away; add credits to use the paid ones.');
-    } catch (e) { vscode.window.showErrorMessage(String(e.message || e)); }
-    this.push();
-  }
-  async signOutOR() { this.orKey = null; await this.ctx.secrets.delete('caret.orkey'); this.push(); }
   async migrate() {
     const old = this.ctx.workspaceState.get('caret.chats');
     if (!old || !old.length || !this.root) return;
@@ -83,9 +70,9 @@ class Chat {
 
   state() {
     return {
-      type: 'state', account: this.account, models: MODELS, or: { connected: !!this.orKey }, root: this.root ? path.basename(this.root) : null,
+      type: 'state', account: this.account, models: MODELS.map(m => (m.tool === 'local' && aeble.recommended().id === m.id ? { ...m, best: true } : m)), root: this.root ? path.basename(this.root) : null,
       tools: { claude: !!cli.resolveCli('claude'), codex: !!cli.resolveCli('codex') },
-      busy: !!this.run, last: MODELS.some(m => m.id === this.ctx.globalState.get('caret.model')) ? this.ctx.globalState.get('caret.model') : (MODELS[0] ? MODELS[0].id : ''), mode: MODES.includes(this.ctx.globalState.get('caret.mode')) ? this.ctx.globalState.get('caret.mode') : 'code', full: !!this.ctx.globalState.get('caret.full'),
+      busy: !!this.run, last: MODELS.some(m => m.id === this.ctx.globalState.get('caret.model')) ? this.ctx.globalState.get('caret.model') : aeble.recommended().id, mode: MODES.includes(this.ctx.globalState.get('caret.mode')) ? this.ctx.globalState.get('caret.mode') : 'code', full: !!this.ctx.globalState.get('caret.full'),
     };
   }
   blank() { return { id: Date.now().toString(36), title: '', session: null, at: Date.now(), msgs: [], hist: [] }; }
@@ -154,9 +141,6 @@ class Chat {
       case 'newChat': await this.newChat(); break;
       case 'login': await this.login(); break;
       case 'logout': { const t = await this.ctx.secrets.get('caret.token'); if (t) await auth.logout(t); await this.clearAccount(); this.push(); this.changed(); break; }
-      case 'signInOR': await this.signInOR(); break;
-      case 'signOutOR': await this.signOutOR(); break;
-      case 'addCredits': vscode.env.openExternal(vscode.Uri.parse(openrouter.CREDITS_URL)); break;
       case 'setModel': if (MODELS.some(x => x.id === m.id)) await this.ctx.globalState.update('caret.model', m.id); break;
       case 'setFull': await this.ctx.globalState.update('caret.full', !!m.full); break;
       case 'setMode': if (MODES.includes(m.mode)) await this.ctx.globalState.update('caret.mode', m.mode); break;
@@ -172,6 +156,22 @@ class Chat {
       this.account = { login: a.login };
       this.push(); this.changed();
     } catch (e) { this.post({ type: 'error', text: String(e.message || e) }); this.push(); }
+  }
+
+  // Downloads Ollama (if missing) and the model behind an Aeble name, with a progress notification.
+  async setupLocal(spec) {
+    if (this.setting) throw new Error('Aeble is already being set up.');
+    this.setting = true;
+    try {
+      await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Setting up ' + spec.label, cancellable: false }, async progress => {
+        let last = -1;
+        await ollama.setup(spec, r => {
+          const text = r.text + (r.pct != null ? ' ' + r.pct + '%' : '');
+          this.post({ type: 'status', text });
+          if (r.pct != null && r.pct !== last) { progress.report({ message: text, increment: last < 0 ? 0 : Math.max(0, r.pct - last) }); last = r.pct; } else if (r.pct == null) progress.report({ message: text });
+        });
+      });
+    } finally { this.setting = false; }
   }
 
   openFile(p) {
@@ -195,13 +195,11 @@ class Chat {
   }
 
   async send(m) {
-    if (this.run) return;
+    if (this.run || this.setting) return;
     if (!this.account) { this.post({ type: 'error', text: 'Log in first.' }); return; }
     const text = String(m.text || '').trim().slice(0, 20000);
     if (!text) return;
     const pick = MODELS.find(x => x.id === m.model) || MODELS[0];
-    if (!pick) { this.post({ type: 'error', text: 'The model list is not loaded yet. Check your internet connection and try again.' }); return; }
-    if (pick.tool === 'openrouter' && !this.orKey) { this.post({ type: 'error', text: 'Sign in to OpenRouter first (the button above the message box).' }); return; }
     const mode = MODES.includes(m.mode) ? m.mode : 'code';
     const full = !!m.full && vscode.workspace.isTrusted;   // no Full access in a folder that is not trusted
     if (m.full && !full) this.post({ type: 'error', text: 'This folder is not trusted, so Full access is off for this message. Trust the folder (the Restricted Mode badge at the bottom) to use it.' });
@@ -240,13 +238,18 @@ class Chat {
     this.post({ type: 'start', mode });
     try {
       const rmode = mode === 'plan' ? 'plan' : (full ? 'auto' : 'edit');   // Full access: the tool asks for nothing
-      if (pick.tool === 'openrouter') this.run = runAgent({ key: this.orKey, model: pick.model, mode: rmode, prompt, system: mode === 'plan' ? MODE_NOTE.plan : '', history: this.cur.hist || [], cwd: this.root, full: rmode === 'auto', numCtx: pick.ctx, on });
-      else this.run = pick.tool === 'codex' ? runCodex({ model: pick.model, mode: rmode, prompt, system, images: files, cwd: this.root, on })
+      if (pick.tool === 'local') {
+        const spec = aeble.find(pick.model);
+        const st = await ollama.status();
+        if (!ollama.has(st.models, spec.id)) await this.setupLocal(spec);
+        this.run = runLocal({ model: spec.id, mode: rmode, prompt, system: mode === 'plan' ? MODE_NOTE.plan : '', history: this.cur.hist || [], cwd: this.root, full: rmode === 'auto', on });
+      } else
+      this.run = pick.tool === 'codex' ? runCodex({ model: pick.model, mode: rmode, prompt, system, images: files, cwd: this.root, on })
         : runClaude({ model: pick.model, mode: rmode, prompt, system, sessionId: this.session, addDirs: files.length ? [path.dirname(files[0])] : [], cwd: this.root, on });
       this.push();
       const r = await this.run.done;
       if (r.sessionId) this.cur.session = r.sessionId;
-      if (pick.tool === 'openrouter') this.cur.hist = [...(this.cur.hist || []), { role: 'user', content: text.slice(0, 4000) }, { role: 'assistant', content: (r.answer || '(worked on files)').slice(0, 4000) }].slice(-12);
+      if (pick.tool === 'local') { this.cur.hist = [...(this.cur.hist || []), { role: 'user', content: text.slice(0, 4000) }, { role: 'assistant', content: (r.answer || '(worked on files)').slice(0, 4000) }].slice(-12); }
       await this.save();
       this.post({ type: 'done', error: r.error || null, plan: mode === 'plan' && !r.error });
     } catch (e) { this.post({ type: 'done', error: String(e.message || e) }); }
@@ -263,6 +266,7 @@ function activate(ctx) {
     vscode.commands.registerCommand('caret.history', () => chat.history()),
     vscode.commands.registerCommand('caret.welcome', () => welcome.show(ctx, chat)),
     vscode.commands.registerCommand('caret.signIn', () => chat.login()),
+    vscode.commands.registerCommand('caret.setupLocal', () => chat.setupLocal(aeble.recommended()).then(() => vscode.window.showInformationMessage(aeble.recommended().label + ' is ready.'), e => vscode.window.showErrorMessage(String(e.message || e)))),
     vscode.commands.registerCommand('caret.signOut', () => chat.onMessage({ type: 'logout' })),
   );
   chat.onAccount = () => {
@@ -282,9 +286,22 @@ function activate(ctx) {
     setTimeout(welcome.closeStock, 2500);
     if (!chat.account) { vscode.commands.executeCommand('workbench.action.closeSidebar'); vscode.commands.executeCommand('workbench.action.closeAuxiliaryBar'); }
     else setTimeout(() => vscode.commands.executeCommand('caret.chat.focus'), 1200);
+    offerLocal(ctx, chat);
   });
   // test hook for screenshots: CARET_DEV_OPEN_CHAT=1
   if (process.env.CARET_DEV_OPEN_CHAT) setTimeout(() => vscode.commands.executeCommand('caret.chat.focus'), 1500);
+}
+// First start: offer to set up Aeble (a multi-GB download, so it asks once instead of starting by itself).
+async function offerLocal(ctx, chat) {
+  try {
+    if (!chat.account || ctx.globalState.get('caret.localAsked')) return;
+    const spec = aeble.recommended();
+    const st = await ollama.status();
+    if (ollama.has(st.models, spec.id)) return;
+    await ctx.globalState.update('caret.localAsked', true);
+    const pick = await vscode.window.showInformationMessage(`Set up ${spec.label}, the AI that runs on your computer? It downloads about ${spec.sizeGB} GB once, then works offline with no usage limit.`, 'Set up', 'Not now');
+    if (pick === 'Set up') await chat.setupLocal(spec).then(() => vscode.window.showInformationMessage(spec.label + ' is ready. Pick it in the model menu.'), e => vscode.window.showErrorMessage(String(e.message || e)));
+  } catch {}
 }
 function deactivate() {}
 module.exports = { activate, deactivate };

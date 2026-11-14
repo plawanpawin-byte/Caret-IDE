@@ -1,14 +1,9 @@
 'use strict';
 // The agent loop for the local AI: ask the model, run the tools it calls, give it the results, repeat.
-const openrouter = require('./openrouter');
-const tools = require('./tools');
-
-const SYSTEM = [
-  'You are Caret, a coding assistant inside the Caret IDE. You work in the open project folder with tools.',
-  'Read the relevant files before you change them. Find the cause of a problem before you fix it. Make small, exact edits with edit_file and keep the existing style of the project.',
-  'For work with several steps, call update_tasks first to show the plan, then again as steps finish.',
-  'When files changed, check your work (run the program or tests if you may, otherwise re-read the files). Answer in the language the user writes in, briefly.',
-].join(String.fromCharCode(10));
+const os = require('os');
+const ollama = require('./ollama');
+const tools = require('./localtools');
+const aeble = require('./aeble');
 
 const MAX_STEPS = { plan: 14, code: 30, agent: 40 };
 
@@ -29,7 +24,8 @@ function runLocal(opts) {
   const abort = new AbortController();
   const result = { error: null, answer: '', files: [] };
   const on = opts.on;
-  const numCtx = opts.numCtx || 32768;
+  const spec = aeble.find(opts.model);
+  const numCtx = opts.numCtx || (spec ? spec.ctx : 8192);
   const budget = Math.floor(numCtx * 2.6);   // about 4 characters per token, with room left for the answer
   const mode = ['plan', 'code', 'agent'].includes(opts.mode) ? opts.mode : 'code';
   let ranCommand = false;
@@ -37,7 +33,8 @@ function runLocal(opts) {
 
   const done = (async () => {
     try {
-      const messages = [{ role: 'system', content: SYSTEM + (opts.system ? '\n\n' + opts.system : '') }, ...(opts.history || []).slice(-10), { role: 'user', content: opts.prompt }];
+      await ollama.ensureServer();
+      const messages = [{ role: 'system', content: aeble.SYSTEM + (opts.system ? '\n\n' + opts.system : '') }, ...(opts.history || []).slice(-10), { role: 'user', content: opts.prompt }];
       const defs = tools.definitions(mode, !process.env.AEBLE_NO_TASKS);
       let nudged = false, badCalls = 0, verified = false;
       const seen = new Set();
@@ -47,7 +44,7 @@ function runLocal(opts) {
         compact(messages, budget);
         let turn;
         try {
-          turn = await openrouter.chat({ key: opts.key, model: opts.model, messages, tools: defs, signal: abort.signal, onEvent: ev => { if (ev.type !== 'text') on.thinking && on.thinking(ev.text); } });
+          turn = await ollama.chat({ model: opts.model, messages, tools: defs, numCtx, think: opts.think, signal: abort.signal, onEvent: ev => { if (ev.type !== 'text') on.thinking && on.thinking(ev.text); } });
           if (turn.content.trim()) on.text(turn.content.trim());   // one message per turn: the chat puts every text event in its own paragraph
         } catch (e) {
           if (abort.signal.aborted) return;
@@ -85,7 +82,7 @@ function runLocal(opts) {
         for (const call of turn.calls) {
           if (abort.signal.aborted) return;
           const name = call.function.name;
-          const args = openrouter.parseArgs(call.function.arguments);
+          const args = ollama.parseArgs(call.function.arguments);
           let text;
           if (name === 'update_tasks') {
             // shown as the task card in the chat (same one Claude's TodoWrite uses)
@@ -124,4 +121,4 @@ function runLocal(opts) {
   return { stop: () => abort.abort(), done };
 }
 
-module.exports = { runAgent: runLocal, compact };
+module.exports = { runLocal, compact };
