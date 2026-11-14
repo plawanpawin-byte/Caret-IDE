@@ -43,7 +43,7 @@ class Chat {
       else if (me) { this.account = { login: me.login }; await this.ctx.globalState.update('caret.login', me.login); }
     }
     this.orKey = await this.ctx.secrets.get('caret.orkey');
-    this.migrate();
+    await this.migrate(); await this.adopt();
     this.push(); this.applyPending();
     this.loadModels();
   }
@@ -78,11 +78,29 @@ class Chat {
   }
   applyPending() {
     if (!this.pending || !this.view) return;
-    const c = this.chats.find(x => x.id === this.pending);
+    const c = this.mine().find(x => x.id === this.pending);
     this.pending = null; this.ctx.globalState.update('caret.pendingChat', undefined);
     if (c) { this.cur = c; this.post({ type: 'load', msgs: c.msgs }); this.titleNow(); }
   }
   changed() { try { this.onAccount?.(); } catch {} }
+  // Chats and settings belong to one GitHub account. A different account on the same computer must not see them.
+  me() { return this.account ? this.account.login : null; }
+  mine() { return this.chats.filter(c => c.owner && c.owner === this.me()); }
+  async adopt() {
+    // data from before accounts were tracked goes to the first account that logs in
+    const login = this.me(); if (!login) return;
+    let n = false; for (const c of this.chats) if (!c.owner) { c.owner = login; n = true; }
+    if (n) await this.ctx.globalState.update('caret.allchats', this.chats);
+    if (!this.ctx.globalState.get('caret.dataOwner') && (this.orKey || this.ctx.globalState.get('caret.onboarded'))) await this.ctx.globalState.update('caret.dataOwner', login);
+  }
+  // The API key and the personal settings of the previous person: removed.
+  async wipeSettings() {
+    this.orKey = null;
+    await this.ctx.secrets.delete('caret.orkey');
+    for (const k of ['caret.role', 'caret.onboarded', 'caret.enabled', 'caret.model', 'caret.avatar', 'caret.dataOwner', 'caret.pendingChat']) await this.ctx.globalState.update(k, undefined);
+    this.pending = null; this.syncModels();
+    this.cur = this.blank(); this.post({ type: 'cleared' }); this.titleNow();
+  }
   async clearAccount() {
     this.account = null;
     await this.ctx.secrets.delete('caret.token');
@@ -101,7 +119,8 @@ class Chat {
   titleNow() { try { if (this.view) this.view.title = this.cur.title || 'New chat'; } catch {} }
   // Keep finished chats in the workspace so the history list can bring them back.
   async save() {
-    if (!this.cur.msgs.length) return;
+    if (!this.cur.msgs.length || !this.me()) return;
+    this.cur.owner = this.me();
     this.cur.at = Date.now();
     this.cur.root = this.root; this.cur.folder = this.root ? path.basename(this.root) : '';
     this.chats = [this.cur, ...this.chats.filter(c => c.id !== this.cur.id)].slice(0, 200);
@@ -115,10 +134,10 @@ class Chat {
   // History is grouped by folder (small grey folder names). Picking a chat from another folder opens that folder and the chat.
   async history() {
     await this.save();
-    if (!this.chats.length) { vscode.window.showInformationMessage('No chats yet.'); return; }
+    if (!this.mine().length) { vscode.window.showInformationMessage('No chats yet.'); return; }
     const ago = t => { const m = Math.max(1, Math.round((Date.now() - t) / 60000)); return m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' days ago'; };
     const groups = new Map();
-    for (const c of this.chats) { const k = c.root || ''; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(c); }
+    for (const c of this.mine()) { const k = c.root || ''; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(c); }
     const keys = [...groups.keys()].sort((a, b) => (b === this.root) - (a === this.root) || groups.get(b)[0].at - groups.get(a)[0].at);
     const items = [];
     for (const k of keys) {
@@ -127,7 +146,7 @@ class Chat {
     }
     const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Chat history' });
     if (!pick || !pick.id || this.run) return;
-    const c = this.chats.find(x => x.id === pick.id);
+    const c = this.mine().find(x => x.id === pick.id);
     if (!c) return;
     if (c.root && c.root !== this.root) {
       if (!fs.existsSync(c.root)) { vscode.window.showWarningMessage('That folder no longer exists: ' + c.root); return; }
@@ -161,7 +180,7 @@ class Chat {
       case 'stop': this.run?.stop(); break;
       case 'newChat': await this.newChat(); break;
       case 'login': await this.login(); break;
-      case 'logout': { const t = await this.ctx.secrets.get('caret.token'); if (t) await auth.logout(t); await this.clearAccount(); this.push(); this.changed(); break; }
+      case 'logout': { const t = await this.ctx.secrets.get('caret.token'); if (t) await auth.logout(t); await this.clearAccount(); await this.wipeSettings(); this.push(); this.changed(); break; }
       case 'openSettings': vscode.commands.executeCommand('caret.openSettings', m.section); break;
       case 'setModel': if (MODELS.some(x => x.id === m.id)) await this.ctx.globalState.update('caret.model', m.id); break;
       case 'setFull': await this.ctx.globalState.update('caret.full', !!m.full); break;
@@ -173,10 +192,16 @@ class Chat {
   async login() {
     try {
       const a = await auth.signIn(url => vscode.env.openExternal(vscode.Uri.parse(url)));
+      // someone else's key and settings are removed before this person gets in
+      const owner = this.ctx.globalState.get('caret.dataOwner');
+      if (owner && owner !== a.login) await this.wipeSettings();
+      if (this.cur.owner && this.cur.owner !== a.login) { this.cur = this.blank(); this.post({ type: 'cleared' }); this.titleNow(); }
+      await this.ctx.globalState.update('caret.dataOwner', a.login);
       await this.ctx.secrets.store('caret.token', a.token);
       await this.ctx.globalState.update('caret.login', a.login);
       await this.ctx.globalState.update('caret.avatar', typeof a.avatar === 'string' && a.avatar.startsWith('https://') ? a.avatar : undefined);
       this.account = { login: a.login };
+      await this.adopt();
       this.push(); this.changed();
     } catch (e) { this.post({ type: 'error', text: String(e.message || e) }); this.push(); }
   }
