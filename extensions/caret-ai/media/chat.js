@@ -111,13 +111,14 @@
         feed, note, composer);
       if (!feed.childElementCount) hello();
     }
-    modelSel.setItems(S.models.map(m => ({ value: m.id, label: m.label })));
+    modelSel.setItems(S.models.map(m => ({ value: m.id, label: m.label, desc: m.desc })));
     modelSel.value = S.last;
     modeSel.value = S.mode;
     fullBtn.classList.toggle('on', !!S.full);
     sendBtn.innerHTML = S.busy ? STOP : SEND; sendBtn.classList.toggle('empty', !S.busy && !input.value.trim() && !pending.length); sendBtn.title = S.busy ? 'Stop' : 'Send (Enter)';
     const missing = [];
-    if (!S.tools.claude) missing.push('Claude Code');
+    const curM = S.models.find(m => m.id === S.last);
+    if (!S.tools.claude && (!curM || curM.tool === 'claude')) missing.push('Claude Code');
     note.replaceChildren(...(missing.length ? [h('span', {}, h('b', { text: 'Claude Code' }), ' was not found. Install it (npm i -g @anthropic-ai/claude-code) and sign in with it.')] : []));
   }
 
@@ -229,6 +230,7 @@
       }
       scroll(); return;
     }
+    if (m.type === 'status') { if (S.busy || statusEl) setStatus(m.text); return; }
     if (m.type === 'cleared') { feed.replaceChildren(); hello(); tools.clear(); grp = null; return; }
     if (m.type === 'error') { setStatus(null); feed.append(h('div', { class: 'err', text: m.text })); scroll(); return; }
     if (m.type === 'start') { curAi = null; curText = ''; if (m.mode) runMode = m.mode; return; }
