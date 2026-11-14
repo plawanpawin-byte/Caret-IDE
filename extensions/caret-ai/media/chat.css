@@ -1,6 +1,6 @@
 :root { --bg: #111111; --card: #151515; --line: #1f1f1f; --line2: #2a2a2a; --text: #b8b5af; --hi: #ecebe8; --mute: #7d7a74; --faint: #55534f; --blue: #2b8fe0; --ok: #6bbf86; --bad: #e5675d; }
 * { box-sizing: border-box; }
-html, body { height: 100%; margin: 0; padding: 0; background: var(--bg); color: var(--text); font: 13px/1.55 var(--vscode-font-family, "Segoe UI", system-ui, sans-serif); }
+html, body { overflow-x: hidden; height: 100%; margin: 0; padding: 0; background: var(--bg); color: var(--text); font: 13px/1.55 var(--vscode-font-family, "Segoe UI", system-ui, sans-serif); }
 #app { height: 100%; display: flex; flex-direction: column; }
 button, select, textarea { font: inherit; color: inherit; }
 .head { display: flex; align-items: center; gap: 6px; padding: 8px 10px 4px; }
@@ -98,10 +98,12 @@ button, select, textarea { font: inherit; color: inherit; }
 .row { flex-wrap: nowrap; gap: 4px; }
 .row .grow { flex: 1; min-width: 0; }
 .fullbtn { padding: 0 7px; flex: none; }
-.dd.plain { max-width: 96px; }
+.dd.plain { max-width: 100%; }
 .dd.plain span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ddw { flex: none; min-width: 0; }
-@container (max-width: 300px) { .fullbtn span { display: none; } }
+.ddw:has(.dd.plain) { flex: 0 1 auto; min-width: 20px; max-width: 130px; }
+.ddw:has(.dd.plain) .dd { max-width: 100%; }
+@container (max-width: 400px) { .fullbtn span { display: none; } }
 .composer { container-type: inline-size; }
 
 /* live status, tasks, thinking */
