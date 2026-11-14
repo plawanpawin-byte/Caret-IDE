@@ -172,11 +172,32 @@ function toOllamaMessages(messages) {
   });
 }
 
+// Small models often write the tool call as plain text (```json {"name":..., "arguments":{...}} ``` or a bare JSON object)
+// instead of Ollama's <tool_call> tags. Find those and turn them into real calls.
+function extractCalls(content, names) {
+  const calls = [];
+  let rest = content;
+  const take = (raw, whole) => {
+    let j; try { j = JSON.parse(raw); } catch { return false; }
+    const list = Array.isArray(j) ? j : [j];
+    const ok = list.filter(x => x && typeof x.name === 'string' && names.includes(x.name) && (x.arguments === undefined || typeof x.arguments === 'object' || typeof x.arguments === 'string'));
+    if (!ok.length || ok.length !== list.length) return false;
+    for (const x of ok) calls.push({ id: 'call_' + Math.random().toString(36).slice(2, 10), type: 'function', function: { name: x.name, arguments: JSON.stringify(parseArgs(x.arguments)) } });
+    rest = rest.replace(whole, '');
+    return true;
+  };
+  for (const m of [...content.matchAll(/```(?:json|tool_call)?\s*([\s\S]*?)```/g)]) take(m[1].trim(), m[0]);
+  for (const m of [...content.matchAll(/<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/g)]) take(m[1].trim(), m[0]);
+  if (!calls.length) { const t = content.trim(); if (/^[\[{]/.test(t)) take(t, content); }
+  return { calls, rest: rest.trim() };
+}
+
 // One model turn. onEvent gets {type:'text'|'thinking', text}; resolves with { content, calls }.
 async function chat({ model, messages, tools, numCtx, think, signal, onEvent }) {
   const split = thinkSplitter();
   const calls = [];
-  let content = '', err = null;
+  let content = '', err = null, held = null;   // held: text that may be a tool call written as text, shown only if it is not one
+  const names = (tools || []).map(t => t.function.name);
   const body = { model, messages: toOllamaMessages(messages), tools: tools && tools.length ? tools : undefined, stream: true, think, keep_alive: '30m', options: { num_ctx: numCtx } };
   const r = await request('POST', '/api/chat', body, {
     signal,
@@ -185,10 +206,20 @@ async function chat({ model, messages, tools, numCtx, think, signal, onEvent }) 
       if (j.error) { err = j.error; return; }
       const msg = j.message || {};
       if (msg.thinking) onEvent({ type: 'thinking', text: msg.thinking });
-      if (msg.content) for (const ev of split(msg.content)) { if (ev.type === 'text') content += ev.text; onEvent(ev); }
+      if (msg.content) for (const ev of split(msg.content)) {
+        if (ev.type !== 'text') { onEvent(ev); continue; }
+        content += ev.text;
+        if (held === null && /^\s*[`{\[<]/.test(content) && names.length) held = '';
+        if (held !== null) held += ev.text; else onEvent(ev);
+      }
       for (const tc of msg.tool_calls || []) calls.push({ id: 'call_' + Math.random().toString(36).slice(2, 10), type: 'function', function: { name: tc.function?.name, arguments: JSON.stringify(tc.function?.arguments ?? {}) } });
     },
   });
+  if (!err && !calls.length && names.length && content.trim()) {
+    const x = extractCalls(content, names);
+    if (x.calls.length) { calls.push(...x.calls); content = x.rest; held = x.rest ? x.rest : null; if (held) { onEvent({ type: 'text', text: held }); held = null; } }
+  }
+  if (held) onEvent({ type: 'text', text: held });
   if (!err && r.status && r.status !== 200) err = 'Ollama answered ' + r.status;
   if (err) {
     if (think !== undefined && /think/i.test(err)) return chat({ model, messages, tools, numCtx, think: undefined, signal, onEvent });
@@ -197,4 +228,4 @@ async function chat({ model, messages, tools, numCtx, think, signal, onEvent }) 
   return { content, calls };
 }
 
-module.exports = { status, ensureServer, setup, chat, tags, has, parseArgs, modelsDir, freeGB };
+module.exports = { extractCalls, status, ensureServer, setup, chat, tags, has, parseArgs, modelsDir, freeGB };
