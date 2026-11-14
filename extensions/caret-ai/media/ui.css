@@ -1,0 +1,25 @@
+/* shared by the setup screens and the Settings page */
+.mbox { width: 100%; background: #181818; border: 1px solid #262626; border-radius: 12px; padding: 12px; }
+.search { width: 100%; height: 34px; padding: 0 12px; border: 1px solid #2a2a2a; border-radius: 9px; background: #1f1f1f; color: #ecebe8; font: inherit; outline: none; }
+.search:focus { border-color: #4a4a4a; }
+.mlist { margin-top: 6px; max-height: 340px; overflow-y: auto; }
+.mrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 4px; border-bottom: 1px solid #242424; cursor: pointer; }
+.mrow:last-child { border-bottom: 0; }
+.mrow:hover .mn { color: #fff; }
+.mn { color: #d9d7d2; }
+.switch { position: relative; flex: none; width: 36px; height: 20px; border: 0; border-radius: 10px; background: #3a3a3a; cursor: pointer; padding: 0; transition: background .15s; }
+.switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #e6e4df; transition: transform .15s; }
+.switch.on { background: #4f8a64; }
+.switch.on::after { transform: translateX(16px); }
+.link { margin-top: 8px; padding: 4px 2px; border: 0; background: transparent; color: #6aa7d8; cursor: pointer; font: inherit; }
+.link:hover { text-decoration: underline; }
+.link[hidden] { display: none; }
+.none { color: #7d7a74; padding: 10px 4px; }
+.btn2 { white-space: nowrap; height: 36px; padding: 0 16px; border: 0; border-radius: 10px; background: #ecebe8; color: #0b0b0b; font: inherit; font-weight: 600; cursor: pointer; }
+.btn2:hover { background: #fff; }
+.btn2:disabled { opacity: .4; cursor: default; }
+.btn2.ghost { background: transparent; color: #cfcdc8; border: 1px solid #333; font-weight: 500; }
+.btn2.ghost:hover { background: #ffffff10; }
+.field { width: 100%; height: 38px; padding: 0 12px; border: 1px solid #2a2a2a; border-radius: 10px; background: #1b1b1b; color: #ecebe8; font: inherit; outline: none; }
+.field:focus { border-color: #4a4a4a; }
+.err { color: #d98b7a; min-height: 18px; font-size: 12px; margin: 6px 0 0; }

@@ -1,7 +1,7 @@
 {
   "name": "caret-ai",
   "displayName": "Caret AI",
-  "description": "Chat with Claude Code and Codex inside Caret IDE.",
+  "description": "AI chat and agent inside Caret IDE.",
   "version": "0.1.0",
   "publisher": "caret",
   "engines": { "vscode": "^1.90.0" },
@@ -21,6 +21,7 @@
       { "command": "caret.newChat", "title": "Caret: New Chat", "icon": "$(add)" },
       { "command": "caret.history", "title": "Caret: Chat History", "icon": "$(history)" },
       { "command": "caret.signIn", "title": "Caret: Log In" },
+      { "command": "caret.openSettings", "title": "Caret: Settings" },
       { "command": "caret.signOut", "title": "Caret: Log Out" }
     ],
     "menus": {

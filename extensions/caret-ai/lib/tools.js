@@ -12,9 +12,9 @@ const ALL = {
   read_file: fn('read_file', 'Read a text file. Returns numbered lines.', { path: { type: 'string' }, start_line: { type: 'integer' }, end_line: { type: 'integer' } }, ['path']),
   search: fn('search', 'Find text in all project files (case-insensitive). Returns file:line matches.', { query: { type: 'string' } }, ['query']),
   write_file: fn('write_file', 'Create a file or replace its whole content.', { path: { type: 'string' }, content: { type: 'string' } }, ['path', 'content']),
-  edit_file: fn('edit_file', 'Replace an exact piece of text in a file. old_text must appear exactly once unless replace_all is true. To ADD code, copy the nearby existing text into new_text as well and put the new code next to it, so nothing is lost.', { path: { type: 'string' }, old_text: { type: 'string' }, new_text: { type: 'string' }, replace_all: { type: 'boolean' } }, ['path', 'old_text', 'new_text']),
+  edit_file: fn('edit_file', 'Replace an exact piece of text in a file. old_text must appear exactly once unless replace_all is true.', { path: { type: 'string' }, old_text: { type: 'string' }, new_text: { type: 'string' }, replace_all: { type: 'boolean' } }, ['path', 'old_text', 'new_text']),
   run_command: fn('run_command', 'Run a shell command in the project folder (for example the tests or the program) and return its output.', { command: { type: 'string' } }, ['command']),
-  update_tasks: fn('update_tasks', 'Show the user your task list. Call it first to split the request into short steps, and again whenever a step starts or finishes.', { tasks: { type: 'array', items: { type: 'object', properties: { content: { type: 'string', description: 'The step, a few words' }, status: { type: 'string', enum: ['pending', 'in_progress', 'completed'] } }, required: ['content', 'status'] } } }, ['tasks']),
+  update_tasks: fn('update_tasks', 'Show the user your task list for a job with several steps: call it first with the short steps, and again whenever a step starts or finishes.', { tasks: { type: 'array', items: { type: 'object', properties: { content: { type: 'string', description: 'The step, a few words' }, status: { type: 'string', enum: ['pending', 'in_progress', 'completed'] } }, required: ['content', 'status'] } } }, ['tasks']),
 };
 const BY_MODE = {
   plan: ['list_dir', 'read_file', 'search'],
@@ -129,8 +129,7 @@ async function execute(name, args, run) {
       const rel = path.relative(root, abs).replace(/\\/g, '/');
       run.files.push(rel); run.on.file(rel);
       // A small model sometimes overwrites a function while meaning to add one next to it. Say so at once.
-      const gone = [...oldT.matchAll(/(?:function|class|def)\s+([A-Za-z_$][\w$]*)/g)].map(m => m[1]).filter(n => !new RegExp('(?:function|class|def)\s+' + n + '\b').test(next));
-      return `Edited ${rel}.` + (gone.length ? ` WARNING: this edit removed ${gone.join(', ')} from the file. If you did not mean to remove it, put it back now.` : '') + syntaxNote(rel, next);
+      return `Edited ${rel}.` + syntaxNote(rel, next);
     }
     case 'run_command': {
       if (!run.full) return 'Not allowed: running commands needs Full access. Tell the user to turn on Full access (the shield button) if they want you to run or test the code.';

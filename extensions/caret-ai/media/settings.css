@@ -1,0 +1,29 @@
+:root { --text: #b8b5af; --hi: #ecebe8; --mute: #7d7a74; --line: #262626; }
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; background: #0b0b0b; color: var(--text); font: 13px/1.5 var(--vscode-font-family, "Segoe UI", system-ui, sans-serif); }
+.shell { max-width: 920px; margin: 0 auto; padding: 28px 24px 60px; }
+.head { font-size: 20px; font-weight: 500; color: var(--hi); margin-bottom: 18px; }
+.cols { display: flex; gap: 28px; align-items: flex-start; }
+.nav { width: 200px; flex: none; display: flex; flex-direction: column; gap: 2px; position: sticky; top: 20px; }
+.ni { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 8px 12px; border: 0; border-radius: 9px; background: transparent; color: #a9a6a0; font: inherit; text-align: left; cursor: pointer; }
+.ni:hover { background: #ffffff0d; color: var(--hi); }
+.ni.on { background: #1f1f1f; color: var(--hi); }
+.ni .ar { opacity: .45; font-size: 11px; }
+.sep { height: 1px; background: var(--line); margin: 8px 4px; }
+.body { flex: 1; min-width: 0; }
+.body h2 { margin: 0 0 14px; font-size: 16px; font-weight: 500; color: var(--hi); }
+.body h3 { margin: 28px 0 8px; font-size: 14px; font-weight: 500; color: var(--hi); }
+.srow { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.srow.wide { display: block; }
+.sn { color: var(--hi); }
+.sd { color: var(--mute); font-size: 12px; margin-top: 2px; }
+.sc { flex: none; }
+.val { color: var(--hi); background: #181818; border-radius: 10px; padding: 7px 14px; }
+.ava { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; display: block; }
+.ava.none { display: grid; place-items: center; background: #2a2a2a; color: var(--hi); font-size: 16px; }
+.sel { background: #181818; color: var(--hi); border: 1px solid #2a2a2a; border-radius: 10px; padding: 7px 10px; font: inherit; outline: none; }
+.keyctl { max-width: 560px; }
+.keyrow { display: flex; gap: 10px; }
+.keylinks { display: flex; gap: 14px; margin-top: 4px; }
+.link.danger { color: #d98b7a; }
+@media (max-width: 640px) { .cols { flex-direction: column; } .nav { width: 100%; position: static; flex-direction: row; flex-wrap: wrap; } .sep { display: none; } }

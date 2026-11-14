@@ -1,0 +1,45 @@
+'use strict';
+// The Settings page: Account and AI live here; the other entries open the usual VS Code screens.
+const vscode = require('vscode');
+const crypto = require('crypto');
+const aiconfig = require('./aiconfig');
+
+let panel = null;
+
+// The names match the gear menu. Each opens the stock screen for it.
+const COMMANDS = {
+  palette: 'workbench.action.showCommands', profiles: 'workbench.profiles.actions.manageProfiles', settings: 'workbench.action.openSettings2',
+  extensions: 'workbench.view.extensions', keys: 'workbench.action.openGlobalKeybindings', snippets: 'workbench.action.openSnippets',
+  tasks: 'workbench.action.tasks.runTask', themes: 'workbench.action.selectTheme', density: 'workbench.action.setLayoutDensity',
+};
+
+async function state(chat) {
+  const s = await aiconfig.ai(chat);
+  return { ...s, type: 'settings', account: chat.account, avatar: chat.ctx.globalState.get('caret.avatar') || null };
+}
+
+async function show(ctx, chat, section) {
+  if (panel) { panel.reveal(); panel.webview.postMessage({ type: 'goto', section }); return; }
+  const media = vscode.Uri.joinPath(ctx.extensionUri, 'media');
+  panel = vscode.window.createWebviewPanel('caret.settings', 'Settings', vscode.ViewColumn.One, { enableScripts: true, localResourceRoots: [media] });
+  panel.onDidDispose(() => { panel = null; });
+  const w = panel.webview, u = f => w.asWebviewUri(vscode.Uri.joinPath(media, f));
+  const nonce = crypto.randomBytes(16).toString('base64');
+  w.html = `<!doctype html><html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${w.cspSource} https: data:; style-src ${w.cspSource}; script-src 'nonce-${nonce}';">
+<link rel="stylesheet" href="${u('ui.css')}"><link rel="stylesheet" href="${u('settings.css')}"></head><body data-section="${section || 'account'}"><div id="app"></div>
+<script nonce="${nonce}" src="${u('ui.js')}"></script><script nonce="${nonce}" src="${u('settings.js')}"></script></body></html>`;
+  const post = m => panel && panel.webview.postMessage(m);
+  w.onDidReceiveMessage(async m => {
+    if (!m) return;
+    if (m.type === 'ready') { post(await state(chat)); return; }
+    if (m.type === 'cmd') { if (COMMANDS[m.name]) vscode.commands.executeCommand(COMMANDS[m.name]).then(undefined, () => {}); return; }
+    if (m.type === 'login') { chat.login(); return; }
+    if (m.type === 'logout') { await chat.onMessage({ type: 'logout' }); post(await state(chat)); return; }
+    if (await aiconfig.handle(chat, m, post)) {
+      if (m.type === 'saveRole') post(await state(chat));
+    }
+  });
+}
+
+module.exports = { show };

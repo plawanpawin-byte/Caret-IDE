@@ -9,6 +9,7 @@ const cli = require('./lib/cli');
 const welcome = require('./lib/welcome');
 const { runClaude, runCodex } = require('./lib/runners');
 const openrouter = require('./lib/openrouter');
+const settings = require('./lib/settings');
 const { runAgent } = require('./lib/agent');
 
 // The model list comes from OpenRouter (filled in by loadModels). tool: how it runs; model: the name handed to it.
@@ -46,21 +47,28 @@ class Chat {
     this.push(); this.applyPending();
     this.loadModels();
   }
+  // The model list comes from OpenRouter. The user decides which models show in the chat menu (Settings, AI).
   async loadModels() {
-    try { const list = await openrouter.models(); MODELS.length = 0; MODELS.push(...list); }
-    catch (e) { this.post({ type: 'error', text: 'Could not load the model list. Check your internet connection.' }); }
-    this.push();
+    try { this.catalog = await openrouter.catalog(); }
+    catch (e) { this.catalog = this.catalog || []; if (this.view) this.post({ type: 'error', text: 'Could not load the model list. Check your internet connection.' }); }
+    this.syncModels(); this.push();
   }
-  // Opens the browser so the user can sign in to OpenRouter; their own key comes back and is kept in the secret store.
-  async signInOR() {
-    try {
-      const key = await openrouter.signIn(u => vscode.env.openExternal(vscode.Uri.parse(u)));
-      this.orKey = key; await this.ctx.secrets.store('caret.orkey', key);
-      vscode.window.showInformationMessage('Connected. Add credits on OpenRouter (the Add credits link) to start using the models.');
-    } catch (e) { vscode.window.showErrorMessage(String(e.message || e)); }
-    this.push();
+  enabledIds() {
+    const s = this.ctx.globalState.get('caret.enabled');
+    return Array.isArray(s) ? s : (this.catalog || []).filter(m => m.popular).map(m => m.id);
   }
-  async signOutOR() { this.orKey = null; await this.ctx.secrets.delete('caret.orkey'); this.push(); }
+  syncModels() {
+    const on = new Set(this.enabledIds());
+    MODELS.length = 0; MODELS.push(...(this.catalog || []).filter(m => on.has(m.id)));
+  }
+  async setEnabled(ids) { await this.ctx.globalState.update('caret.enabled', ids.filter(x => typeof x === 'string').slice(0, 400)); this.syncModels(); this.push(); }
+  async setKey(key) {
+    const r = await openrouter.checkKey(key);
+    if (r.ok) { this.orKey = String(key).trim(); await this.ctx.secrets.store('caret.orkey', this.orKey); this.push(); }
+    return r;
+  }
+  async removeKey() { this.orKey = null; await this.ctx.secrets.delete('caret.orkey'); this.push(); }
+  maskedKey() { return this.orKey ? 'sk-or-…' + this.orKey.slice(-4) : ''; }
   async migrate() {
     const old = this.ctx.workspaceState.get('caret.chats');
     if (!old || !old.length || !this.root) return;
@@ -154,9 +162,7 @@ class Chat {
       case 'newChat': await this.newChat(); break;
       case 'login': await this.login(); break;
       case 'logout': { const t = await this.ctx.secrets.get('caret.token'); if (t) await auth.logout(t); await this.clearAccount(); this.push(); this.changed(); break; }
-      case 'signInOR': await this.signInOR(); break;
-      case 'signOutOR': await this.signOutOR(); break;
-      case 'addCredits': vscode.env.openExternal(vscode.Uri.parse(openrouter.CREDITS_URL)); break;
+      case 'openSettings': vscode.commands.executeCommand('caret.openSettings', m.section); break;
       case 'setModel': if (MODELS.some(x => x.id === m.id)) await this.ctx.globalState.update('caret.model', m.id); break;
       case 'setFull': await this.ctx.globalState.update('caret.full', !!m.full); break;
       case 'setMode': if (MODES.includes(m.mode)) await this.ctx.globalState.update('caret.mode', m.mode); break;
@@ -169,6 +175,7 @@ class Chat {
       const a = await auth.signIn(url => vscode.env.openExternal(vscode.Uri.parse(url)));
       await this.ctx.secrets.store('caret.token', a.token);
       await this.ctx.globalState.update('caret.login', a.login);
+      await this.ctx.globalState.update('caret.avatar', typeof a.avatar === 'string' && a.avatar.startsWith('https://') ? a.avatar : undefined);
       this.account = { login: a.login };
       this.push(); this.changed();
     } catch (e) { this.post({ type: 'error', text: String(e.message || e) }); this.push(); }
@@ -263,6 +270,7 @@ function activate(ctx) {
     vscode.commands.registerCommand('caret.history', () => chat.history()),
     vscode.commands.registerCommand('caret.welcome', () => welcome.show(ctx, chat)),
     vscode.commands.registerCommand('caret.signIn', () => chat.login()),
+    vscode.commands.registerCommand('caret.openSettings', section => settings.show(ctx, chat, typeof section === 'string' ? section : 'account')),
     vscode.commands.registerCommand('caret.signOut', () => chat.onMessage({ type: 'logout' })),
   );
   chat.onAccount = () => {

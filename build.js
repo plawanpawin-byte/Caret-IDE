@@ -96,6 +96,18 @@ step('look');
   fs.appendFileSync(css, '\n' + fs.readFileSync(path.join(ROOT, 'brand', 'overrides.css'), 'utf8'));
 }
 
+step('Settings opens Caret settings');
+{
+  // The gear menu and Ctrl+, run the stock openSettings action with no arguments: send that to our Settings page.
+  // Calls that carry a query (links that jump to one setting) keep opening the stock screen.
+  const f = path.join(OUT, 'resources', 'app', 'out', 'vs', 'workbench', 'workbench.desktop.main.js');
+  const code = fs.readFileSync(f, 'utf8');
+  const from = 'run(t,i){let n=typeof i=="string"?{query:i}:aq(i);return t.get(Mn).openSettings({...n})}';
+  const to = 'run(t,i){if(i===void 0)return t.get(ye).executeCommand("caret.openSettings","account");let n=typeof i=="string"?{query:i}:aq(i);return t.get(Mn).openSettings({...n})}';
+  if (!code.includes(from)) throw new Error('Settings patch: the stock code was not found (the base app changed). Update build.js.');
+  fs.writeFileSync(f, code.replace(from, () => to));
+}
+
 step('icon and version');
 if (fs.existsSync(RCEDIT) && fs.existsSync(ICON)) {
   const r = spawnSync(RCEDIT, [path.join(OUT, EXE), '--set-icon', ICON,

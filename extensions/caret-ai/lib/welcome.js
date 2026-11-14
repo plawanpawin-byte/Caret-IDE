@@ -2,6 +2,7 @@
 const vscode = require('vscode');
 const path = require('path');
 const crypto = require('crypto');
+const aiconfig = require('./aiconfig');
 
 let panel = null;
 
@@ -18,7 +19,7 @@ async function recent() {
 
 async function send(chat) {
   if (!panel) return;
-  panel.webview.postMessage({ type: 'state', account: chat.account, items: await recent() });
+  panel.webview.postMessage({ type: 'state', account: chat.account, items: await recent(), onboarded: !!chat.ctx.globalState.get('caret.onboarded') });
 }
 
 async function show(ctx, chat) {
@@ -30,8 +31,8 @@ async function show(ctx, chat) {
   const nonce = crypto.randomBytes(16).toString('base64');
   w.html = `<!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${w.cspSource} data:; style-src ${w.cspSource}; script-src 'nonce-${nonce}';">
-<link rel="stylesheet" href="${u('welcome.css')}"></head><body data-logo="${u('logo.png')}"><div id="app"></div>
-<script nonce="${nonce}" src="${u('welcome.js')}"></script></body></html>`;
+<link rel="stylesheet" href="${u('ui.css')}"><link rel="stylesheet" href="${u('welcome.css')}"></head><body data-logo="${u('logo.png')}"><div id="app"></div>
+<script nonce="${nonce}" src="${u('ui.js')}"></script><script nonce="${nonce}" src="${u('welcome.js')}"></script></body></html>`;
   w.onDidReceiveMessage(async m => {
     switch (m?.type) {
       case 'ready': send(chat); break;
@@ -39,7 +40,9 @@ async function show(ctx, chat) {
       case 'clone': vscode.commands.executeCommand('git.clone'); break;
       case 'newFile': vscode.commands.executeCommand('workbench.action.files.newUntitledFile'); break;
       case 'login': chat.login(); break;
+      case 'finishSetup': await aiconfig.handle(chat, m, x => panel && panel.webview.postMessage(x)); send(chat); break;
       case 'open': if (typeof m.uri === 'string') vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.parse(m.uri)); break;
+      default: await aiconfig.handle(chat, m, x => panel && panel.webview.postMessage(x));
     }
   });
 }

@@ -1,12 +1,11 @@
 'use strict';
-// OpenRouter: sign-in (OAuth PKCE, the user gets their OWN key), the model list, and streaming chat with tool calls.
-// The user pays for their own use with their own OpenRouter credits. Nothing here holds a key of ours.
+// OpenRouter: the user pastes THEIR OWN API key (made at openrouter.ai/keys) and pays for use from their own credits.
+// This file checks the key, loads the model list and streams chat answers with tool calls. No key of ours is involved.
 const https = require('https');
-const http = require('http');
-const crypto = require('crypto');
 
 const HOST = 'openrouter.ai';
 const CREDITS_URL = 'https://openrouter.ai/settings/credits';
+const KEYS_URL = 'https://openrouter.ai/settings/keys';
 
 function request(method, path, body, headers, onData, signal) {
   return new Promise((resolve, reject) => {
@@ -22,54 +21,33 @@ function request(method, path, body, headers, onData, signal) {
   });
 }
 
-const b64url = buf => buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-
-// Opens the browser at OpenRouter, waits for the redirect to a temporary local page, trades the code for the user's key.
-// openUrl(url) is given by the caller (vscode.env.openExternal).
-function signIn(openUrl) {
-  return new Promise((resolve, reject) => {
-    const verifier = b64url(crypto.randomBytes(48));
-    const challenge = b64url(crypto.createHash('sha256').update(verifier).digest());
-    const state = b64url(crypto.randomBytes(12));
-    let done = false;
-    const server = http.createServer(async (req, res) => {
-      const u = new URL(req.url, 'http://localhost');
-      if (u.pathname !== '/callback') { res.statusCode = 404; res.end(); return; }
-      const code = u.searchParams.get('code');
-      const page = msg => { res.setHeader('Content-Type', 'text/html; charset=utf-8'); res.end('<!doctype html><meta charset="utf-8"><title>Caret IDE</title><body style="font:16px system-ui;background:#0b0b0b;color:#eee;display:grid;place-items:center;height:100vh;margin:0"><div>' + msg + '</div>'); };
-      if (!code || u.searchParams.get('state') !== state) { page('Sign-in was not completed. You can close this tab.'); finish(new Error('Sign-in was cancelled.')); return; }
-      try {
-        const r = await request('POST', '/api/v1/auth/keys', { code, code_verifier: verifier, code_challenge_method: 'S256' });
-        const j = JSON.parse(r.text || '{}');
-        if (r.status !== 200 || !j.key) throw new Error('OpenRouter did not give a key (' + r.status + ').');
-        page('Signed in. You can close this tab and go back to Caret IDE.');
-        finish(null, j.key);
-      } catch (e) { page('Sign-in failed. You can close this tab.'); finish(e); }
-    });
-    const timer = setTimeout(() => finish(new Error('Sign-in timed out. Try again.')), 5 * 60 * 1000);
-    function finish(err, key) { if (done) return; done = true; clearTimeout(timer); try { server.close(); } catch {} err ? reject(err) : resolve(key); }
-    server.on('error', e => finish(e));
-    server.listen(0, 'localhost', () => {
-      const cb = 'http://localhost:' + server.address().port + '/callback';
-      openUrl('https://' + HOST + '/auth?callback_url=' + encodeURIComponent(cb) + '&code_challenge=' + challenge + '&code_challenge_method=S256&state=' + state + '&key_label=' + encodeURIComponent('Caret IDE'));
-    });
-  });
+// Is this key accepted? Returns { ok, error }.
+async function checkKey(key) {
+  key = String(key || '').trim();
+  if (!/^sk-or-[\w-]{8,}$/.test(key)) return { ok: false, error: 'That does not look like an OpenRouter key. It starts with sk-or-.' };
+  try {
+    const r = await request('GET', '/api/v1/key', null, { Authorization: 'Bearer ' + key });
+    if (r.status === 200) return { ok: true };
+    if (r.status === 401 || r.status === 403) return { ok: false, error: 'OpenRouter did not accept this key. Check that you copied all of it.' };
+    return { ok: false, error: 'OpenRouter answered with an error (' + r.status + '). Try again in a moment.' };
+  } catch { return { ok: false, error: 'Could not reach OpenRouter. Check your internet connection.' }; }
 }
 
-// The list for the model menu: the newest paid models of Claude, GPT and Gemini that can call tools, cheapest first within each maker.
-// No free models: they are too busy and too limited for coding work. The user pays from their own OpenRouter credits.
+// Every paid model that can call tools. "popular" marks the newest few of Claude, GPT and Gemini: those are on by default.
 const MAKERS = ['anthropic', 'openai', 'google'];
 let cached = null;
-async function models() {
+async function catalog() {
   if (cached && Date.now() - cached.at < 3600e3) return cached.list;
   const r = await request('GET', '/api/v1/models');
   if (r.status !== 200) throw new Error('Could not load the model list (' + r.status + ').');
   const cost = m => +m.pricing.prompt * 1e6 + 4 * (+m.pricing.completion * 1e6);
   const all = (JSON.parse(r.text).data || []).filter(m => (m.supported_parameters || []).includes('tools') && ((m.architecture || {}).output_modalities || ['text']).join() === 'text' && !/:(batch|extended|thinking|free)$/.test(m.id) && cost(m) > 0);
   const price = m => '$' + (+m.pricing.prompt * 1e6).toFixed(2) + ' in / $' + (+m.pricing.completion * 1e6).toFixed(2) + ' out per 1M tokens';
-  const entry = m => ({ id: 'or:' + m.id, label: m.name.replace(/^[^:]+:/, '').trim(), tool: 'openrouter', model: m.id, desc: price(m), ctx: m.context_length || 32768 });
-  const list = [];
-  for (const mk of MAKERS) list.push(...all.filter(m => m.id.startsWith(mk + '/')).sort((a, b) => b.created - a.created).slice(0, 3).sort((a, b) => cost(a) - cost(b)).map(entry));
+  const popular = new Set();
+  for (const mk of MAKERS) all.filter(m => m.id.startsWith(mk + '/')).sort((a, b) => b.created - a.created).slice(0, 3).forEach(m => popular.add(m.id));
+  const entry = m => ({ id: 'or:' + m.id, label: m.name.replace(/^[^:]+:/, '').trim(), tool: 'openrouter', model: m.id, desc: price(m), ctx: m.context_length || 32768, popular: popular.has(m.id), cost: cost(m), maker: m.id.split('/')[0] });
+  const rank = m => { const i = MAKERS.indexOf(m.maker); return i < 0 ? MAKERS.length : i; };
+  const list = all.map(entry).sort((a, b) => (b.popular - a.popular) || (rank(a) - rank(b)) || (a.cost - b.cost) || a.label.localeCompare(b.label));
   cached = { at: Date.now(), list };
   return list;
 }
@@ -89,15 +67,15 @@ function toWire(messages) {
 
 function explain(status, text) {
   let msg = ''; try { const j = JSON.parse(text); msg = (j.error && (j.error.message || j.error)) || ''; } catch {}
-  if (status === 401) return 'OpenRouter did not accept the sign-in. Sign in again.';
-  if (status === 402) return 'This model needs credits. Add credits at ' + CREDITS_URL + ' or pick a Free model.';
-  if (status === 429) return 'This model is busy or you reached its limit for now. Wait a moment, or pick another model. ' + (msg ? '(' + String(msg).slice(0, 160) + ')' : '');
+  if (status === 401) return 'OpenRouter did not accept your API key. Check it in Settings, AI.';
+  if (status === 402) return 'Your OpenRouter credits ran out (or this model needs credits). Add credits at ' + CREDITS_URL;
+  if (status === 429) return 'This model is busy or you reached a limit for now. Wait a moment, or pick another model. ' + (msg ? '(' + String(msg).slice(0, 160) + ')' : '');
   return 'OpenRouter error ' + status + (msg ? ': ' + String(msg).slice(0, 200) : '');
 }
 
 // Streams one answer. Returns { content, calls:[{id, function:{name, arguments:string}}] }.
 async function chat({ key, model, messages, tools, signal, onEvent }) {
-  if (!key) throw new Error('Connect your AI account first.');
+  if (!key) throw new Error('Add your OpenRouter API key first (Settings, AI).');
   const body = { model, messages: toWire(messages), stream: true };
   if (tools && tools.length) body.tools = tools;
   let buf = '', content = '', err = null;
@@ -127,4 +105,4 @@ async function chat({ key, model, messages, tools, signal, onEvent }) {
   return { content, calls };
 }
 
-module.exports = { signIn, models, chat, parseArgs, explain, CREDITS_URL };
+module.exports = { checkKey, catalog, chat, parseArgs, explain, CREDITS_URL, KEYS_URL };

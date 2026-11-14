@@ -117,8 +117,8 @@
     fullBtn.classList.toggle('on', !!S.full);
     sendBtn.innerHTML = S.busy ? STOP : SEND; sendBtn.classList.toggle('empty', !S.busy && !input.value.trim() && !pending.length); sendBtn.title = S.busy ? 'Stop' : 'Send (Enter)';
     // OpenRouter: the user signs in once; the models are paid from their own OpenRouter credits.
-    if (!(S.or && S.or.connected)) note.replaceChildren(h('button', { class: 'btn', text: 'Connect your AI account', title: 'Opens OpenRouter in your browser. You pay for what you use from your own credits.', onclick: () => vscode.postMessage({ type: 'signInOR' }) }));
-    else note.replaceChildren(h('span', {}, 'Connected. '), h('a', { text: 'Add credits', title: 'Opens OpenRouter in your browser', onclick: () => vscode.postMessage({ type: 'addCredits' }) }), h('span', { text: ' · ' }), h('a', { text: 'Sign out', onclick: () => vscode.postMessage({ type: 'signOutOR' }) }));
+    if (!(S.or && S.or.connected)) note.replaceChildren(h('button', { class: 'btn', text: 'Add your API key', title: 'Opens Settings, AI', onclick: () => vscode.postMessage({ type: 'openSettings', section: 'ai' }) }));
+    else note.replaceChildren();
   }
 
   function scroll() { feed.scrollTop = feed.scrollHeight; }
