@@ -28,6 +28,7 @@ function runLocal(opts) {
   const numCtx = opts.numCtx || (spec ? spec.ctx : 8192);
   const budget = Math.floor(numCtx * 2.6);   // about 4 characters per token, with room left for the answer
   const mode = ['plan', 'code', 'agent'].includes(opts.mode) ? opts.mode : 'code';
+  let ranCommand = false;
   const run = { root: opts.cwd, full: !!opts.full, signal: abort.signal, files: result.files, on };
 
   const done = (async () => {
@@ -71,6 +72,8 @@ function runLocal(opts) {
             messages.push({ role: 'user', content: run.full ? 'Before you finish, check your work: run the program or its tests with run_command and read the output, or read the changed files again. If something is wrong, fix it. Then reply with a short summary.' : 'Before you finish, read the changed files again and check nothing was lost by mistake (for example a function or export you meant to keep). If something is wrong, fix it. Then reply with a short summary.' });
             continue;
           }
+          // A small model sometimes says it ran the program when it never did. Say so.
+          if (!ranCommand && /(i (have )?(ran|run|tested|executed)|the output (was|is)|tests? (passed|pass))/i.test(turn.content)) on.text('\n\n_Note: nothing was actually run in this chat' + (run.full ? '.' : ' (running commands needs Full access).') + ' Please check the result yourself._');
           if (!turn.content.trim() && !result.answer && !result.files.length) on.text('_The model stopped without doing anything. Send the request again._');
           return;
         }
@@ -102,7 +105,7 @@ function runLocal(opts) {
               if (readOnly && seen.has(key)) { text = 'You already did exactly this and nothing has changed since. Use what you have and make the change now.'; on.tool({ id: call.id, status: 'done', result: text }); }
               else {
                 seen.add(key);
-                try { text = String(await tools.execute(name, args, run)); on.tool({ id: call.id, status: 'done', result: text }); if (isWrite) { writes.set('w:' + args.path, sig); writes.set('n:' + args.path, (writes.get('n:' + args.path) || 0) + 1); } }
+                try { if (name === 'run_command' && run.full) ranCommand = true; text = String(await tools.execute(name, args, run)); on.tool({ id: call.id, status: 'done', result: text }); if (isWrite) { writes.set('w:' + args.path, sig); writes.set('n:' + args.path, (writes.get('n:' + args.path) || 0) + 1); } }
                 catch (e) { text = 'Error: ' + e.message; on.tool({ id: call.id, status: 'error', result: e.message }); }
               }
             }
