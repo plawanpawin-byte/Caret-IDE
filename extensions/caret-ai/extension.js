@@ -242,7 +242,7 @@ class Chat {
         const spec = aeble.find(pick.model);
         const st = await ollama.status();
         if (!ollama.has(st.models, spec.id)) await this.setupLocal(spec);
-        this.run = runLocal({ model: spec.id, mode: rmode, prompt, system: mode === 'plan' ? MODE_NOTE.plan : '', history: this.cur.hist || [], cwd: this.root, full: rmode === 'auto', on });
+        this.run = runLocal({ model: spec.id, mode: rmode, prompt, ask: text, system: mode === 'plan' ? MODE_NOTE.plan : '', history: this.cur.hist || [], cwd: this.root, full: rmode === 'auto', on });
       } else
       this.run = pick.tool === 'codex' ? runCodex({ model: pick.model, mode: rmode, prompt, system, images: files, cwd: this.root, on })
         : runClaude({ model: pick.model, mode: rmode, prompt, system, sessionId: this.session, addDirs: files.length ? [path.dirname(files[0])] : [], cwd: this.root, on });

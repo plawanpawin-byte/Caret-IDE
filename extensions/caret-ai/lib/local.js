@@ -84,7 +84,9 @@ function runLocal(opts) {
           const name = call.function.name;
           const args = ollama.parseArgs(call.function.arguments);
           let text;
-          if (name === 'update_tasks') {
+          if (name === 'update_tasks' && String(opts.ask == null ? opts.prompt : opts.ask).trim().length < 30) {
+            text = 'Not needed for a short message. Do not use tools; just answer the user in their language.';   // a small model makes a task list even for a greeting
+          } else if (name === 'update_tasks') {
             // shown as the task card in the chat (same one Claude's TodoWrite uses)
             const todos = (Array.isArray(args.tasks) ? args.tasks : []).slice(0, 12).map(t => ({ content: String(t.content || '').slice(0, 120), status: ['pending', 'in_progress', 'completed'].includes(t.status) ? t.status : 'pending' }));
             on.tool({ id: 'local-tasks', name: 'TodoWrite', args: { todos }, status: 'done' });
