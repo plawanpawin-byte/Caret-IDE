@@ -104,18 +104,36 @@
   const side = h('aside', { class: 'side' });
   const stage = h('main', { class: 'stage' });
   let sess = { list: [], cur: '' };
-  const ago = t => { const m = Math.max(1, Math.round((Date.now() - t) / 60000)); return m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' days ago'; };
+  const SUG = [['Explain this project', 'Walk me through how this project is organised'], ['Start with a plan', 'Align on implementation before writing code'], ['Debug an issue', 'Find root causes and fix tricky bugs'], ['Write tests', 'Add tests for the code I changed']];
+  const below = h('div', { class: 'below' }, h('button', { class: 'planchip', onclick: () => { S.mode = 'plan'; vscode.postMessage({ type: 'setMode', mode: 'plan' }); build(); input.focus(); } }, h('span', { text: 'Plan New Idea' }), h('kbd', { text: 'Tab' })),
+    h('div', { class: 'sug' }, SUG.map(([t, d]) => h('button', { class: 'sg', onclick: () => { input.value = t + ': ' + d; input.focus(); sync(); } }, h('b', { text: t }), h('span', { text: d })))));
+  const ago = t => { const m = Math.max(1, Math.round((Date.now() - t) / 60000)); return m < 60 ? m + 'm' : m < 1440 ? Math.round(m / 60) + 'h' : Math.round(m / 1440) + 'd'; };
+  const ic = d => { const el = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); el.setAttribute('width', '15'); el.setAttribute('height', '15'); el.setAttribute('viewBox', '0 0 24 24'); el.setAttribute('fill', 'none'); el.setAttribute('stroke', 'currentColor'); el.setAttribute('stroke-width', '1.8'); el.setAttribute('stroke-linecap', 'round'); el.setAttribute('stroke-linejoin', 'round'); const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', d); el.append(p); return el; };
+  const I = { plus: 'M12 5v14M5 12h14', search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM21 21l-4.3-4.3', folder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', addfolder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 10v6M9 13h6', cust: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM17 13v7M13.5 16.5h7', gear: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3.9a7 7 0 0 0-2-1.2L14.2 3h-4l-.4 2.6a7 7 0 0 0-2 1.2l-2.3-.9-2 3.4 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-.9a7 7 0 0 0 2 1.2l.4 2.6h4l.4-2.6a7 7 0 0 0 2-1.2l2.3.9 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z' };
+  let q = '', searching = false;
   function drawSide() {
     const groups = new Map();
-    for (const c of sess.list) { const k = c.folder || 'No folder'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(c); }
+    for (const c of sess.list) { if (q && !(c.title || '').toLowerCase().includes(q.toLowerCase())) continue; const k = c.folder || ''; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(c); }
+    const who = S.account && S.account.login;
+    const search = h('input', { class: 'sq', placeholder: 'Search sessions', value: q, oninput: e => { q = e.target.value; drawSide(); const n = side.querySelector('.sq'); if (n) { n.focus(); n.setSelectionRange(q.length, q.length); } } });
+    const body = groups.size ? [...groups].flatMap(([k, items]) => [
+      h('div', { class: 'grp' }, ic(k ? I.folder : 'M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z'), h('span', { text: k || 'No Repo' })),
+      ...items.map(c => h('button', { class: 'sitem' + (c.id === sess.cur ? ' on' : ''), title: c.title, onclick: () => vscode.postMessage({ type: 'openSession', id: c.id }) }, h('i', { class: 'dot' }), h('span', { class: 'st', text: c.title }), h('span', { class: 'sw', text: ago(c.at) }))),
+    ]) : [h('div', { class: 'none', text: q ? 'No match' : 'No sessions yet' })];
     side.replaceChildren(
-      h('button', { class: 'newsess', onclick: () => vscode.postMessage({ type: 'newSession' }) }, h('span', { text: '+ New Session' }), h('kbd', { text: 'Ctrl N' })),
-      h('div', { class: 'sh', text: 'Sessions' }),
-      ...(sess.list.length ? [...groups].flatMap(([k, items]) => [h('div', { class: 'grp', text: k }), ...items.map(c => h('button', { class: 'sitem' + (c.id === sess.cur ? ' on' : ''), title: c.title, onclick: () => vscode.postMessage({ type: 'openSession', id: c.id }) }, h('span', { class: 'st', text: c.title }), h('span', { class: 'sw', text: ago(c.at) })))]) : [h('div', { class: 'none', text: 'No sessions yet' })]));
+      h('div', { class: 'tools' }, h('button', { class: 'ib' + (searching ? ' on' : ''), title: 'Search sessions', onclick: () => { searching = !searching; if (!searching) q = ''; drawSide(); const n = side.querySelector('.sq'); if (n) n.focus(); } }, ic(I.search))),
+      searching ? search : '',
+      h('button', { class: 'nav on', onclick: () => vscode.postMessage({ type: 'newSession' }) }, ic(I.plus), h('span', { text: 'New Chat' })),
+      h('button', { class: 'nav', onclick: () => vscode.postMessage({ type: 'openSettings', section: 'ai' }) }, ic(I.cust), h('span', { text: 'Customize' })),
+      h('div', { class: 'sh' }, h('span', { text: 'Repositories' }), h('button', { class: 'ib', title: 'Open a folder', onclick: () => vscode.postMessage({ type: 'openFolder' }) }, ic(I.addfolder))),
+      h('div', { class: 'slist' }, ...body),
+      h('div', { class: 'sfoot' },
+        (S.or && S.or.connected) ? null : h('div', { class: 'gs' }, h('div', { class: 'gsh' }, h('span', { text: 'Getting Started' }), h('span', { class: 'gsn', text: '0/1' })), h('button', { class: 'btn', text: 'Add your API key', onclick: () => vscode.postMessage({ type: 'openSettings', section: 'ai' }) })),
+        h('div', { class: 'me' }, h('span', { class: 'av', text: who ? who.slice(0, 1).toUpperCase() : '?' }), h('span', { class: 'mn', text: who || 'Not signed in' }), h('button', { class: 'ib', title: 'Settings', onclick: () => vscode.postMessage({ type: 'openSettings', section: 'account' }) }, ic(I.gear)))));
   }
   function hello() {
     const who = S.account?.login;
-    if (AG) { feed.replaceChildren(h('div', { class: 'hello' }, h('h1', { text: who ? `Let\u2019s ship something, ${who}` : 'Caret IDE' }), S.root ? h('div', { class: 'chips' }, h('span', { class: 'chip', text: 'This Computer' }), h('span', { class: 'chip', text: S.root }), S.branch ? h('span', { class: 'chip', text: S.branch }) : null) : h('p', { text: 'Open a folder to start (File, Open Folder).' }))); return; }
+    if (AG) { feed.replaceChildren(h('div', { class: 'hello' }, h('div', { class: 'chips' }, h('button', { class: 'chip', text: S.root || 'Open a folder', title: 'Open a folder', onclick: () => vscode.postMessage({ type: 'openFolder' }) }), h('span', { class: 'chip', text: 'This PC' }), S.branch ? h('span', { class: 'chip', text: S.branch }) : null))); return; }
     feed.replaceChildren(h('div', { class: 'hello' }, h('img', { src: logo, alt: '' }),
       h('h1', { text: who ? `Hey ${who}, what should we build today?` : 'Caret IDE' }),
       S.root ? null : h('p', { text: 'Open a folder to start (File, Open Folder).' })));
@@ -123,7 +141,7 @@
 
   function build() {
     if (!app.contains(feed)) {
-      if (AG) { stage.replaceChildren(feed, note, composer); app.replaceChildren(side, stage); app.classList.add('agents'); drawSide(); new MutationObserver(() => stage.classList.toggle('empty', !!feed.querySelector('.hello'))).observe(feed, { childList: true }); }
+      if (AG) { stage.replaceChildren(feed, note, composer, below); composer.querySelector('.row').prepend(ctxBtn); app.replaceChildren(side, stage); app.classList.add('agents'); drawSide(); new MutationObserver(() => stage.classList.toggle('empty', !!feed.querySelector('.hello'))).observe(feed, { childList: true }); }
       else app.replaceChildren(
         feed, note, composer);
       if (!feed.childElementCount) hello();

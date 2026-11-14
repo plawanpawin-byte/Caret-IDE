@@ -4,7 +4,7 @@ Unicode true
 
 !define NAME "Caret IDE"
 !define EXE "Caret IDE.exe"
-!define VERSION "0.6.5"
+!define VERSION "0.6.6"
 !define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\CaretIDE"
 
 Name "${NAME}"

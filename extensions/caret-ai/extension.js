@@ -203,6 +203,7 @@ class Chat {
       case 'logout': { const t = await this.ctx.secrets.get('caret.token'); if (t) await auth.logout(t); await this.clearAccount(); await this.wipeSettings(); this.push(); this.changed(); break; }
       case 'openSession': if (typeof m.id === 'string') this.openChat(m.id); break;
       case 'newSession': this.newChat(); break;
+      case 'openFolder': vscode.commands.executeCommand('workbench.action.files.openFolder'); break;
       case 'openSettings': vscode.commands.executeCommand('caret.openSettings', m.section); break;
       case 'setModel': if (MODELS.some(x => x.id === m.id)) await this.ctx.globalState.update('caret.model', m.id); break;
       case 'setFull': await this.ctx.globalState.update('caret.full', !!m.full); break;
