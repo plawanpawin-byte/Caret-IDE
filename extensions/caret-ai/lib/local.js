@@ -35,7 +35,7 @@ function runLocal(opts) {
     try {
       await ollama.ensureServer();
       const messages = [{ role: 'system', content: aeble.SYSTEM + (opts.system ? '\n\n' + opts.system : '') }, ...(opts.history || []).slice(-10), { role: 'user', content: opts.prompt }];
-      const defs = tools.definitions(mode);
+      const defs = tools.definitions(mode, !process.env.AEBLE_NO_TASKS);
       let nudged = false, badCalls = 0, verified = false;
       const seen = new Set();
       const writes = new Map();

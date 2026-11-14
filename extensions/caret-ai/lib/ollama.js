@@ -188,7 +188,25 @@ function extractCalls(content, names) {
   };
   for (const m of [...content.matchAll(/```(?:json|tool_call)?\s*([\s\S]*?)```/g)]) take(m[1].trim(), m[0]);
   for (const m of [...content.matchAll(/<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/g)]) take(m[1].trim(), m[0]);
-  if (!calls.length) { const t = content.trim(); if (/^[\[{]/.test(t)) take(t, content); }
+  if (!calls.length) {
+    // a call written in the middle of a sentence: find each {"name": ...} object by matching its braces
+    const src = content;
+    const ranges = [];
+    for (let i = 0; i < src.length; i++) {
+      if (src[i] !== '{' || !/^\{\s*"name"\s*:/.test(src.slice(i, i + 24))) continue;
+      let depth = 0, inStr = false, esc = false, end = -1;
+      for (let k = i; k < src.length; k++) {
+        const c = src[k];
+        if (inStr) { if (esc) esc = false; else if (c === String.fromCharCode(92)) esc = true; else if (c === '"') inStr = false; continue; }
+        if (c === '"') inStr = true; else if (c === '{') depth++; else if (c === '}' && --depth === 0) { end = k; break; }
+      }
+      if (end < 0) break;
+      const raw = src.slice(i, end + 1);
+      const before = calls.length;
+      take(raw, raw);
+      if (calls.length > before) { ranges.push([i, end + 1]); i = end; }
+    }
+  }
   return { calls, rest: rest.trim() };
 }
 
@@ -196,7 +214,7 @@ function extractCalls(content, names) {
 async function chat({ model, messages, tools, numCtx, think, signal, onEvent }) {
   const split = thinkSplitter();
   const calls = [];
-  let content = '', err = null, held = null;   // held: text that may be a tool call written as text, shown only if it is not one
+  let content = '', err = null, emitted = 0, marker = -1;   // text that may hold a tool call written as text is shown only if it is not one
   const names = (tools || []).map(t => t.function.name);
   const body = { model, messages: toOllamaMessages(messages), tools: tools && tools.length ? tools : undefined, stream: true, think, keep_alive: '30m', options: { num_ctx: numCtx } };
   const r = await request('POST', '/api/chat', body, {
@@ -209,17 +227,18 @@ async function chat({ model, messages, tools, numCtx, think, signal, onEvent }) 
       if (msg.content) for (const ev of split(msg.content)) {
         if (ev.type !== 'text') { onEvent(ev); continue; }
         content += ev.text;
-        if (held === null && /^\s*[`{\[<]/.test(content) && names.length) held = '';
-        if (held !== null) held += ev.text; else onEvent(ev);
+        if (marker < 0 && names.length) { const m = /(\{\s*"name"|```|<tool_call>)/.exec(content.slice(emitted)); if (m) marker = emitted + m.index; }
+        const limit = marker >= 0 ? marker : Math.max(emitted, content.length - 14);   // keep the tail back: it may be the start of a marker
+        if (limit > emitted) { onEvent({ type: 'text', text: content.slice(emitted, limit) }); emitted = limit; }
       }
       for (const tc of msg.tool_calls || []) calls.push({ id: 'call_' + Math.random().toString(36).slice(2, 10), type: 'function', function: { name: tc.function?.name, arguments: JSON.stringify(tc.function?.arguments ?? {}) } });
     },
   });
   if (!err && !calls.length && names.length && content.trim()) {
     const x = extractCalls(content, names);
-    if (x.calls.length) { calls.push(...x.calls); content = x.rest; held = x.rest ? x.rest : null; if (held) { onEvent({ type: 'text', text: held }); held = null; } }
+    if (x.calls.length) { calls.push(...x.calls); content = x.rest; emitted = Infinity; }   // the call itself is not shown as text
   }
-  if (held) onEvent({ type: 'text', text: held });
+  if (!err && emitted !== Infinity && emitted < content.length) { onEvent({ type: 'text', text: content.slice(emitted) }); emitted = content.length; }
   if (!err && r.status && r.status !== 200) err = 'Ollama answered ' + r.status;
   if (err) {
     if (think !== undefined && /think/i.test(err)) return chat({ model, messages, tools, numCtx, think: undefined, signal, onEvent });

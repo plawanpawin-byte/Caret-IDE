@@ -22,7 +22,7 @@ const BY_MODE = {
 };
 BY_MODE.agent = BY_MODE.code;   // no sub-agents for a local model: Agent mode works like Code
 
-const definitions = mode => (BY_MODE[mode] || BY_MODE.code).map(n => ALL[n]);
+const definitions = (mode, withTasks = true) => (BY_MODE[mode] || BY_MODE.code).filter(n => withTasks || n !== 'update_tasks').map(n => ALL[n]);
 const allowedIn = (mode, name) => (BY_MODE[mode] || BY_MODE.code).includes(name);
 
 const SKIP = new Set(['node_modules', '.git', 'dist', 'build', '.next', '__pycache__', '.venv', 'venv', '.idea', '.vscode']);
