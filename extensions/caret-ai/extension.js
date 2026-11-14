@@ -7,7 +7,6 @@ const fs = require('fs');
 const auth = require('./lib/auth');
 const cli = require('./lib/cli');
 const welcome = require('./lib/welcome');
-const { runClaude, runCodex } = require('./lib/runners');
 const openrouter = require('./lib/openrouter');
 const settings = require('./lib/settings');
 const { runAgent } = require('./lib/agent');
@@ -110,7 +109,6 @@ class Chat {
   state() {
     return {
       type: 'state', account: this.account, models: MODELS, or: { connected: !!this.orKey }, root: this.root ? path.basename(this.root) : null,
-      tools: { claude: !!cli.resolveCli('claude'), codex: !!cli.resolveCli('codex') },
       busy: !!this.run, last: MODELS.some(m => m.id === this.ctx.globalState.get('caret.model')) ? this.ctx.globalState.get('caret.model') : (MODELS[0] ? MODELS[0].id : ''), mode: MODES.includes(this.ctx.globalState.get('caret.mode')) ? this.ctx.globalState.get('caret.mode') : 'code', full: !!this.ctx.globalState.get('caret.full'),
     };
   }
@@ -199,7 +197,7 @@ class Chat {
       await this.ctx.globalState.update('caret.dataOwner', a.login);
       await this.ctx.secrets.store('caret.token', a.token);
       await this.ctx.globalState.update('caret.login', a.login);
-      await this.ctx.globalState.update('caret.avatar', typeof a.avatar === 'string' && a.avatar.startsWith('https://') ? a.avatar : undefined);
+      await this.ctx.globalState.update('caret.avatar', String(a.avatar).startsWith('https://avatars.githubusercontent.com/') ? a.avatar : undefined);
       this.account = { login: a.login };
       await this.adopt();
       this.push(); this.changed();
@@ -260,7 +258,9 @@ class Chat {
     const on = {
       text: t => { msgs.push({ r: 'ai', t: String(t).slice(0, 8000) }); this.post({ type: 'text', text: t }); },
       tool: t => {
-        const rec = { r: 'tool', id: t.id, name: t.name, args: t.args && typeof t.args === 'object' ? { command: t.args.command, file_path: t.args.file_path, path: t.args.path, pattern: t.args.pattern, todos: Array.isArray(t.args.todos) ? t.args.todos.slice(0, 40).map(x => ({ content: String(x.content || x.subject || '').slice(0, 200), status: x.status })) : undefined } : t.args, status: t.status, result: t.result ? String(t.result).slice(0, 1500) : undefined };
+        const prev = msgs.find(m => m.r === 'tool' && m.id === t.id) || {}; const tname = t.name || prev.name;
+        const rec = { r: 'tool', id: t.id, name: tname, args: t.args && typeof t.args === 'object' ? { command: t.args.command, file_path: t.args.file_path, path: t.args.path, pattern: t.args.pattern, todos: Array.isArray(t.args.todos) ? t.args.todos.slice(0, 40).map(x => ({ content: String(x.content || x.subject || '').slice(0, 200), status: x.status })) : undefined } : t.args, status: t.status, result: t.result && !/^(read_file|search|run_command|list_dir)$/.test(tname || '') ? String(t.result).slice(0, 600) : undefined };   // what the AI read or ran is not kept on disk (it can hold secrets)
+
         const i = msgs.findIndex(m => m.r === 'tool' && m.id === t.id);
         if (i >= 0) msgs[i] = rec; else msgs.push(rec);
         if (msgs.length > 300) msgs.splice(0, msgs.length - 300);
@@ -272,9 +272,7 @@ class Chat {
     this.post({ type: 'start', mode });
     try {
       const rmode = mode === 'plan' ? 'plan' : (full ? 'auto' : 'edit');   // Full access: the tool asks for nothing
-      if (pick.tool === 'openrouter') this.run = runAgent({ key: this.orKey, model: pick.model, mode: rmode, prompt, system: mode === 'plan' ? MODE_NOTE.plan : '', history: this.cur.hist || [], cwd: this.root, full: rmode === 'auto', numCtx: pick.ctx, on });
-      else this.run = pick.tool === 'codex' ? runCodex({ model: pick.model, mode: rmode, prompt, system, images: files, cwd: this.root, on })
-        : runClaude({ model: pick.model, mode: rmode, prompt, system, sessionId: this.session, addDirs: files.length ? [path.dirname(files[0])] : [], cwd: this.root, on });
+      this.run = runAgent({ key: this.orKey, model: pick.model, mode: rmode, prompt, system: mode === 'plan' ? MODE_NOTE.plan : '', history: this.cur.hist || [], cwd: this.root, full: rmode === 'auto', numCtx: pick.ctx, on });
       this.push();
       const r = await this.run.done;
       if (r.sessionId) this.cur.session = r.sessionId;

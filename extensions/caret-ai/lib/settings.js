@@ -26,7 +26,7 @@ async function show(ctx, chat, section) {
   const w = panel.webview, u = f => w.asWebviewUri(vscode.Uri.joinPath(media, f));
   const nonce = crypto.randomBytes(16).toString('base64');
   w.html = `<!doctype html><html><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${w.cspSource} https: data:; style-src ${w.cspSource}; script-src 'nonce-${nonce}';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${w.cspSource} https://avatars.githubusercontent.com data:; style-src ${w.cspSource}; script-src 'nonce-${nonce}';">
 <link rel="stylesheet" href="${u('ui.css')}"><link rel="stylesheet" href="${u('settings.css')}"></head><body data-section="${section || 'account'}"><div id="app"></div>
 <script nonce="${nonce}" src="${u('ui.js')}"></script><script nonce="${nonce}" src="${u('settings.js')}"></script></body></html>`;
   const post = m => panel && panel.webview.postMessage(m);

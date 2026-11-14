@@ -28,10 +28,22 @@ const allowedIn = (mode, name) => (BY_MODE[mode] || BY_MODE.code).includes(name)
 const SKIP = new Set(['node_modules', '.git', 'dist', 'build', '.next', '__pycache__', '.venv', 'venv', '.idea', '.vscode']);
 const BINARY = /\.(png|jpe?g|gif|webp|ico|pdf|zip|gz|exe|dll|so|woff2?|ttf|mp[34]|mov|lock)$/i;
 
-function safe(root, p) {
+// Folders where a written file can later run by itself (git hooks, editor tasks, CI). Changing them needs Full access.
+const PROTECTED = /^(\.git|\.vscode|\.husky|\.github|\.gitlab|\.devcontainer)([\\/]|$)/i;
+const inside = (a, b) => { const r = path.relative(a, b); return r !== '..' && !r.startsWith('..' + path.sep) && !path.isAbsolute(r); };
+// The real location of a path, following links, even when the file itself does not exist yet.
+function real(p) {
+  let cur = p, rest = '';
+  for (;;) {
+    try { return path.join(fs.realpathSync.native(cur), rest); }
+    catch { const up = path.dirname(cur); if (up === cur) return p; rest = path.join(path.basename(cur), rest); cur = up; }
+  }
+}
+function safe(root, p, write, full) {
   const abs = path.resolve(root, String(p || '.'));
-  const rel = path.relative(root, abs);
-  if (rel.startsWith('..') || path.isAbsolute(rel)) throw new Error('That path is outside the project folder.');
+  // a link (symlink or junction) inside the project must not lead outside it
+  if (!inside(root, abs) || !inside(real(root), real(abs))) throw new Error('That path is outside the project folder.');
+  if (write && !full && PROTECTED.test(path.relative(root, abs))) throw new Error('Not allowed: files in ' + path.relative(root, abs).split(/[\\/]/)[0] + ' can run code by themselves, so changing them needs Full access. Tell the user.');
   return abs;
 }
 
@@ -108,7 +120,7 @@ async function execute(name, args, run) {
       return hits.length ? hits.join('\n') : 'No matches.';
     }
     case 'write_file': {
-      const abs = safe(root, args.path);
+      const abs = safe(root, args.path, true, run.full);
       const content = String(args.content ?? '');
       fs.mkdirSync(path.dirname(abs), { recursive: true });
       fs.writeFileSync(abs, content);
@@ -117,7 +129,7 @@ async function execute(name, args, run) {
       return `Wrote ${rel} (${content.split('\n').length} lines).` + syntaxNote(rel, content);
     }
     case 'edit_file': {
-      const abs = safe(root, args.path);
+      const abs = safe(root, args.path, true, run.full);
       let text; try { text = fs.readFileSync(abs, 'utf8'); } catch { throw new Error('That file does not exist. Use write_file to create it.'); }
       const oldT = String(args.old_text ?? ''), newT = String(args.new_text ?? '');
       if (!oldT) throw new Error('old_text is empty.');

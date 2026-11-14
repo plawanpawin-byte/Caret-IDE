@@ -4,7 +4,7 @@ Unicode true
 
 !define NAME "Caret IDE"
 !define EXE "Caret IDE.exe"
-!define VERSION "0.6.7"
+!define VERSION "0.6.8"
 !define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\CaretIDE"
 
 Name "${NAME}"
@@ -18,6 +18,14 @@ ShowInstDetails nevershow
 !define MUI_UNICON "..\brand\icon.ico"
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${EXE}"
 !define MUI_FINISHPAGE_RUN_TEXT "Start Caret IDE"
+; Always install into a folder called "Caret IDE", so uninstalling can never touch someone else's files.
+Function DirLeave
+  StrLen $0 "Caret IDE"
+  StrCpy $1 $INSTDIR "" -$0
+  StrCmp $1 "Caret IDE" +2
+  StrCpy $INSTDIR "$INSTDIR\Caret IDE"
+FunctionEnd
+!define MUI_PAGE_CUSTOMFUNCTION_LEAVE DirLeave
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
@@ -50,5 +58,26 @@ Section "Uninstall"
   Delete "$SMPROGRAMS\${NAME}.lnk"
   Delete "$DESKTOP\${NAME}.lnk"
   DeleteRegKey HKCU "${UNINST_KEY}"
+  ; only our own folder is removed with everything inside; any other folder (older installs) loses just our files
+  StrLen $0 "Caret IDE"
+  StrCpy $1 $INSTDIR "" -$0
+  StrCmp $1 "Caret IDE" 0 other
   RMDir /r "$INSTDIR"
+  Goto done
+  other:
+  Delete "$INSTDIR\${EXE}"
+  Delete "$INSTDIR\Caret IDE.VisualElementsManifest.xml"
+  Delete "$INSTDIR\Uninstall.exe"
+  Delete "$INSTDIR\*.dll"
+  Delete "$INSTDIR\*.pak"
+  Delete "$INSTDIR\*.bin"
+  Delete "$INSTDIR\*.dat"
+  Delete "$INSTDIR\*.html"
+  Delete "$INSTDIR\vk_swiftshader_icd.json"
+  RMDir /r "$INSTDIR\resources"
+  RMDir /r "$INSTDIR\bin"
+  RMDir /r "$INSTDIR\locales"
+  RMDir /r "$INSTDIR\policies"
+  RMDir "$INSTDIR"
+  done:
 SectionEnd
