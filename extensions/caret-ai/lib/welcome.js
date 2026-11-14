@@ -38,13 +38,26 @@ async function show(ctx, chat) {
       case 'ready': send(chat); break;
       case 'openFolder': vscode.commands.executeCommand('workbench.action.files.openFolder'); break;
       case 'clone': vscode.commands.executeCommand('git.clone'); break;
-      case 'newFile': vscode.commands.executeCommand('workbench.action.files.newUntitledFile'); break;
+      case 'ssh': connectSsh(); break;
       case 'login': chat.login(); break;
       case 'finishSetup': await aiconfig.handle(chat, m, x => panel && panel.webview.postMessage(x)); send(chat); break;
       case 'open': if (typeof m.uri === 'string') vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.parse(m.uri)); break;
       default: await aiconfig.handle(chat, m, x => panel && panel.webview.postMessage(x));
     }
   });
+}
+
+// Connect via SSH needs the free Open Remote - SSH extension (Open VSX). Ask once, install it, then it works from the same button.
+async function connectSsh() {
+  const have = (await vscode.commands.getCommands(true)).includes('openremotessh.openEmptyWindow');
+  if (have) { vscode.commands.executeCommand('openremotessh.openEmptyWindow'); return; }
+  const pick = await vscode.window.showInformationMessage('Connecting over SSH needs the free extension "Open Remote - SSH" (from Open VSX). Install it now?', 'Install', 'Cancel');
+  if (pick !== 'Install') return;
+  try {
+    await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Installing Open Remote - SSH' }, () => vscode.commands.executeCommand('workbench.extensions.installExtension', 'jeanp413.open-remote-ssh'));
+    const next = await vscode.window.showInformationMessage('Installed. Reload Caret IDE, then press Connect via SSH again.', 'Reload');
+    if (next === 'Reload') vscode.commands.executeCommand('workbench.action.reloadWindow');
+  } catch (e) { vscode.window.showErrorMessage('Could not install the extension: ' + String(e.message || e)); }
 }
 
 // the stock VS Code welcome page can open on a first run; ours replaces it

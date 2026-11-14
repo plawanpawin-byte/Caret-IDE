@@ -43,7 +43,7 @@ Object.assign(p, {
   win32MutexName: 'caretide', win32DirName: 'Caret IDE', win32NameVersion: 'Caret IDE', win32RegValueName: 'CaretIDE',
   win32AppUserModelId: 'Caret.CaretIDE', win32ShellNameShort: 'Caret IDE', win32TunnelServiceMutex: 'caretide-tunnelservice', win32TunnelMutex: 'caretide-tunnel',
   urlProtocol: 'caret-ide', linuxIconName: 'caret-ide', darwinBundleIdentifier: 'app.caretagent.ide',
-  serverApplicationName: 'caret-ide-server', serverDataFolderName: '.caret-ide-server', tunnelApplicationName: 'caret-ide-tunnel',
+  tunnelApplicationName: 'caret-ide-tunnel',   // the server names stay VSCodium's (codium-server): SSH downloads VSCodium's server build
   reportIssueUrl: 'https://github.com/plawanpawin-byte/Caret-Agent/issues/new', downloadUrl: 'https://github.com/plawanpawin-byte/Caret-Agent/releases',
   licenseUrl: 'https://github.com/plawanpawin-byte/Caret-Agent',
   updateUrl: '', // updates arrive as new installers for now
@@ -105,6 +105,17 @@ step('Settings opens Caret settings');
   const from = 'run(t,i){let n=typeof i=="string"?{query:i}:aq(i);return t.get(Mn).openSettings({...n})}';
   const to = 'run(t,i){if(i===void 0)return t.get(ye).executeCommand("caret.openSettings","account");let n=typeof i=="string"?{query:i}:aq(i);return t.get(Mn).openSettings({...n})}';
   if (!code.includes(from)) throw new Error('Settings patch: the stock code was not found (the base app changed). Update build.js.');
+  fs.writeFileSync(f, code.replace(from, () => to));
+}
+
+step('Gear opens Settings directly');
+{
+  // One click on the gear opens our Settings page (the stock gear shows a menu first). Right-click still works as before.
+  const f = path.join(OUT, 'resources', 'app', 'out', 'vs', 'workbench', 'workbench.desktop.main.js');
+  const code = fs.readFileSync(f, 'utf8');
+  const from = 'i=await this.resolveMainMenuActions(t,e),{anchorAlignment:n,anchorAxisAlignment:r}=this.contextMenuAlignmentOptions()??{anchorAlignment:void 0,anchorAxisAlignment:void 0};this.contextMenuService.showContextMenu({getAnchor:()=>this.label,';
+  const to = 'i=await this.resolveMainMenuActions(t,e),caretS=this.menuId===F.GlobalActivity?i.find(x=>x.id==="workbench.action.openSettings"):null,{anchorAlignment:n,anchorAxisAlignment:r}=this.contextMenuAlignmentOptions()??{anchorAlignment:void 0,anchorAxisAlignment:void 0};if(caretS){e.dispose();await caretS.run();return}this.contextMenuService.showContextMenu({getAnchor:()=>this.label,';
+  if (code.split(from).length !== 2) throw new Error('Gear patch: the stock code was not found exactly once (the base app changed). Update build.js.');
   fs.writeFileSync(f, code.replace(from, () => to));
 }
 
