@@ -116,10 +116,9 @@
     modeSel.value = S.mode;
     fullBtn.classList.toggle('on', !!S.full);
     sendBtn.innerHTML = S.busy ? STOP : SEND; sendBtn.classList.toggle('empty', !S.busy && !input.value.trim() && !pending.length); sendBtn.title = S.busy ? 'Stop' : 'Send (Enter)';
-    const missing = [];
-    const curM = S.models.find(m => m.id === S.last);
-    if (!S.tools.claude && (!curM || curM.tool === 'claude')) missing.push('Claude Code');
-    note.replaceChildren(...(missing.length ? [h('span', {}, h('b', { text: 'Claude Code' }), ' was not found. Install it (npm i -g @anthropic-ai/claude-code) and sign in with it.')] : []));
+    // OpenRouter: the user signs in once and pays for paid models from their own credits. Free models need no credits.
+    if (!(S.or && S.or.connected)) note.replaceChildren(h('button', { class: 'btn', text: 'Sign in with OpenRouter', title: 'Opens your browser. Free models work right after sign-in.', onclick: () => vscode.postMessage({ type: 'signInOR' }) }));
+    else note.replaceChildren(h('span', {}, 'OpenRouter connected. '), h('a', { text: 'Add credits', title: 'Opens OpenRouter in your browser', onclick: () => vscode.postMessage({ type: 'addCredits' }) }), h('span', { text: ' · ' }), h('a', { text: 'Sign out', onclick: () => vscode.postMessage({ type: 'signOutOR' }) }));
   }
 
   function scroll() { feed.scrollTop = feed.scrollHeight; }

@@ -8,10 +8,11 @@ const auth = require('./lib/auth');
 const cli = require('./lib/cli');
 const welcome = require('./lib/welcome');
 const { runClaude, runCodex } = require('./lib/runners');
+const openrouter = require('./lib/openrouter');
+const { runAgent } = require('./lib/agent');
 
-// tool: which command-line tool runs it; model: the name handed to that tool.
-const MODELS = [
-];
+// The model list comes from OpenRouter (filled in by loadModels). tool: how it runs; model: the name handed to it.
+const MODELS = [];
 const MODES = ['plan', 'code', 'agent'];
 const MODE_NOTE = {
   plan: 'PLAN MODE. Do not change any file and do not run anything that changes the project. Do not write a plan file. If the request is a job to do, reply with the tasks that would get it done, one line per task, each line starting with `[ ] ` (3 to 7 short tasks, nothing else about the list), and do not start the work. If it is only a question or a chat, just answer it normally and write no `[ ]` lines.',
@@ -40,9 +41,26 @@ class Chat {
       if (me === null) await this.clearAccount();
       else if (me) { this.account = { login: me.login }; await this.ctx.globalState.update('caret.login', me.login); }
     }
+    this.orKey = await this.ctx.secrets.get('caret.orkey');
     this.migrate();
     this.push(); this.applyPending();
+    this.loadModels();
   }
+  async loadModels() {
+    try { const list = await openrouter.models(); MODELS.length = 0; MODELS.push(...list); }
+    catch (e) { this.post({ type: 'error', text: 'Could not load the model list. Check your internet connection.' }); }
+    this.push();
+  }
+  // Opens the browser so the user can sign in to OpenRouter; their own key comes back and is kept in the secret store.
+  async signInOR() {
+    try {
+      const key = await openrouter.signIn(u => vscode.env.openExternal(vscode.Uri.parse(u)));
+      this.orKey = key; await this.ctx.secrets.store('caret.orkey', key);
+      vscode.window.showInformationMessage('Signed in to OpenRouter. Free models work right away; add credits to use the paid ones.');
+    } catch (e) { vscode.window.showErrorMessage(String(e.message || e)); }
+    this.push();
+  }
+  async signOutOR() { this.orKey = null; await this.ctx.secrets.delete('caret.orkey'); this.push(); }
   async migrate() {
     const old = this.ctx.workspaceState.get('caret.chats');
     if (!old || !old.length || !this.root) return;
@@ -65,7 +83,7 @@ class Chat {
 
   state() {
     return {
-      type: 'state', account: this.account, models: MODELS, root: this.root ? path.basename(this.root) : null,
+      type: 'state', account: this.account, models: MODELS, or: { connected: !!this.orKey }, root: this.root ? path.basename(this.root) : null,
       tools: { claude: !!cli.resolveCli('claude'), codex: !!cli.resolveCli('codex') },
       busy: !!this.run, last: MODELS.some(m => m.id === this.ctx.globalState.get('caret.model')) ? this.ctx.globalState.get('caret.model') : (MODELS[0] ? MODELS[0].id : ''), mode: MODES.includes(this.ctx.globalState.get('caret.mode')) ? this.ctx.globalState.get('caret.mode') : 'code', full: !!this.ctx.globalState.get('caret.full'),
     };
@@ -136,6 +154,9 @@ class Chat {
       case 'newChat': await this.newChat(); break;
       case 'login': await this.login(); break;
       case 'logout': { const t = await this.ctx.secrets.get('caret.token'); if (t) await auth.logout(t); await this.clearAccount(); this.push(); this.changed(); break; }
+      case 'signInOR': await this.signInOR(); break;
+      case 'signOutOR': await this.signOutOR(); break;
+      case 'addCredits': vscode.env.openExternal(vscode.Uri.parse(openrouter.CREDITS_URL)); break;
       case 'setModel': if (MODELS.some(x => x.id === m.id)) await this.ctx.globalState.update('caret.model', m.id); break;
       case 'setFull': await this.ctx.globalState.update('caret.full', !!m.full); break;
       case 'setMode': if (MODES.includes(m.mode)) await this.ctx.globalState.update('caret.mode', m.mode); break;
@@ -179,7 +200,8 @@ class Chat {
     const text = String(m.text || '').trim().slice(0, 20000);
     if (!text) return;
     const pick = MODELS.find(x => x.id === m.model) || MODELS[0];
-    if (!pick) { this.post({ type: 'error', text: 'No AI model is connected yet.' }); return; }
+    if (!pick) { this.post({ type: 'error', text: 'The model list is not loaded yet. Check your internet connection and try again.' }); return; }
+    if (pick.tool === 'openrouter' && !this.orKey) { this.post({ type: 'error', text: 'Sign in to OpenRouter first (the button above the message box).' }); return; }
     const mode = MODES.includes(m.mode) ? m.mode : 'code';
     const full = !!m.full && vscode.workspace.isTrusted;   // no Full access in a folder that is not trusted
     if (m.full && !full) this.post({ type: 'error', text: 'This folder is not trusted, so Full access is off for this message. Trust the folder (the Restricted Mode badge at the bottom) to use it.' });
@@ -218,11 +240,13 @@ class Chat {
     this.post({ type: 'start', mode });
     try {
       const rmode = mode === 'plan' ? 'plan' : (full ? 'auto' : 'edit');   // Full access: the tool asks for nothing
-      this.run = pick.tool === 'codex' ? runCodex({ model: pick.model, mode: rmode, prompt, system, images: files, cwd: this.root, on })
+      if (pick.tool === 'openrouter') this.run = runAgent({ key: this.orKey, model: pick.model, mode: rmode, prompt, system: mode === 'plan' ? MODE_NOTE.plan : '', history: this.cur.hist || [], cwd: this.root, full: rmode === 'auto', numCtx: pick.ctx, on });
+      else this.run = pick.tool === 'codex' ? runCodex({ model: pick.model, mode: rmode, prompt, system, images: files, cwd: this.root, on })
         : runClaude({ model: pick.model, mode: rmode, prompt, system, sessionId: this.session, addDirs: files.length ? [path.dirname(files[0])] : [], cwd: this.root, on });
       this.push();
       const r = await this.run.done;
       if (r.sessionId) this.cur.session = r.sessionId;
+      if (pick.tool === 'openrouter') this.cur.hist = [...(this.cur.hist || []), { role: 'user', content: text.slice(0, 4000) }, { role: 'assistant', content: (r.answer || '(worked on files)').slice(0, 4000) }].slice(-12);
       await this.save();
       this.post({ type: 'done', error: r.error || null, plan: mode === 'plan' && !r.error });
     } catch (e) { this.post({ type: 'done', error: String(e.message || e) }); }
