@@ -120,13 +120,26 @@ class Chat {
     if (['readonly', 'auto', 'full'].includes(p)) return p;
     return this.ctx.globalState.get('caret.full') ? 'full' : 'auto';   // older versions had only a Full access switch
   }
+  // Folder trust: asked once when a folder is opened, then remembered. Full access only works in a trusted folder.
+  trusted() {
+    if (!this.root) return false;
+    const list = this.ctx.globalState.get('caret.trusted') || [];
+    return vscode.workspace.isTrusted || list.includes(this.root.toLowerCase());
+  }
+  async askTrust() {
+    if (!this.root || this.trusted()) return this.trusted();
+    const pick = await vscode.window.showWarningMessage('Do you trust the files in this folder?', { modal: true, detail: this.root + '\n\nCaret AI edits files and runs commands here. Trust it only if you know where the files come from.' }, 'Trust folder');
+    if (pick !== 'Trust folder') return false;
+    const list = this.ctx.globalState.get('caret.trusted') || [];
+    await this.ctx.globalState.update('caret.trusted', [...list, this.root.toLowerCase()].slice(-200));
+    return true;
+  }
   async setPerm(p) {
     if (!['readonly', 'auto', 'full'].includes(p)) return;
-    if (p === 'full' && !vscode.workspace.isTrusted) {
+    if (p === 'full' && !this.trusted()) {
       this.push();   // the menu keeps showing what is really set
-      const pick = await vscode.window.showWarningMessage('This folder is not trusted yet. Full access lets the AI run any command in it. Trust the folder first, only if you know what is in it.', { modal: true }, 'Trust this folder');
-      if (pick === 'Trust this folder') { this.wantFull = true; vscode.commands.executeCommand('workbench.trust.manage'); }
-      return;
+      if (!this.root) { this.post({ type: 'error', text: 'Open a folder first (File, Open Folder).' }); return; }
+      if (!(await this.askTrust())) return;
     }
     await this.ctx.globalState.update('caret.perm', p);
     this.push();
@@ -281,7 +294,7 @@ class Chat {
     if (pick.tool === 'openrouter' && !this.orKey) { this.post({ type: 'error', text: 'Connect your AI account first (the button above the message box).' }); return; }
     const mode = MODES.includes(m.mode) ? m.mode : 'code';
     let perm = this.perm();
-    if (perm === 'full' && !vscode.workspace.isTrusted) {   // trust can be taken away after Full access was chosen
+    if (perm === 'full' && !this.trusted()) {   // a different folder may be open now
       perm = 'auto'; await this.ctx.globalState.update('caret.perm', 'auto'); this.push();
       this.post({ type: 'error', text: 'This folder is not trusted, so Full access was switched back to Auto.' });
     }
@@ -343,7 +356,6 @@ function activate(ctx) {
     vscode.commands.registerCommand('caret.signIn', () => chat.login()),
     vscode.commands.registerCommand('caret.openSettings', section => settings.show(ctx, chat, typeof section === 'string' ? section : 'account')),
     vscode.commands.registerCommand('caret.signOut', () => chat.onMessage({ type: 'logout' })),
-    vscode.workspace.onDidGrantWorkspaceTrust(() => { if (chat.wantFull) { chat.wantFull = false; chat.setPerm('full'); } }),
   );
   chat.onAccount = () => {
     welcome.refresh(chat);
@@ -362,6 +374,8 @@ function activate(ctx) {
     setTimeout(welcome.closeStock, 2500);
     if (!chat.account) { vscode.commands.executeCommand('workbench.action.closeSidebar'); vscode.commands.executeCommand('workbench.action.closeAuxiliaryBar'); }
     else setTimeout(() => vscode.commands.executeCommand('caret.chat.focus'), 1200);
+    // a folder was opened that has not been trusted yet: ask once, the answer is remembered
+    if (chat.account && chat.root && !process.env.CARET_DEV_OPEN_CHAT) setTimeout(() => chat.askTrust().then(() => chat.push()), 3000);
   });
   // test hook for screenshots: CARET_DEV_OPEN_CHAT=1
   if (process.env.CARET_DEV_OPEN_CHAT) setTimeout(() => vscode.commands.executeCommand('caret.chat.focus'), 1500);

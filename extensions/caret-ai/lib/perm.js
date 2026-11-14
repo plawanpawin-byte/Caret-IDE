@@ -41,4 +41,25 @@ function isSafe(command) {
   return parts.length > 0 && parts.every(p => SAFE.some(re => re.test(p)));
 }
 
-module.exports = { isSafe };
+// Auto permission runs commands by itself. Only these (wiping folders, system changes, piping a download into a shell,
+// rewriting git history) still ask the user first.
+const DANGER = [
+  /\brm\s+(-[a-z]*[rf][a-z]*|--recursive|--force)\b/i,
+  /\b(del|erase)\b[^&|;]*\s\/[sq]\b/i,
+  /\b(rmdir|rd)\b[^&|;]*\s\/s\b/i,
+  /\bremove-item\b[^&|;]*-(recurse|force)/i,
+  /\bsudo\b/i,
+  /\b(mkfs|diskpart|shutdown|reboot|halt)\b/i,
+  /\bformat\s+[a-z]:/i,
+  /\bdd\s+if=/i,
+  /\breg\s+(add|delete)\b/i,
+  /\b(curl|wget|iwr|irm|invoke-webrequest|invoke-restmethod)\b[^|;&]*\|\s*(sh|bash|zsh|iex|invoke-expression|powershell|pwsh)\b/i,
+  /\bset-executionpolicy\b/i,
+  /\bgit\s+push\b[^&|;]*(--force|\s-f\b)/i,
+  /\bgit\s+(reset\s+--hard|clean\s+-[a-z]*f)/i,
+  /\bchmod\s+-R\b|\bchown\s+-R\b/i,
+  />\s*\/dev\/(sd|nvme|disk)/i,
+];
+const isDangerous = command => { const c = String(command || ''); return DANGER.some(re => re.test(c)); };
+
+module.exports = { isSafe, isDangerous };

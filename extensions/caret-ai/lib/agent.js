@@ -16,7 +16,7 @@ const SYSTEM = [
 // What the AI is allowed to do right now. It is told, so it never claims it lacks (or has) a permission it does not.
 const PERM_NOTE = {
   readonly: 'PERMISSION: READ ONLY. You can list, read and search files. You cannot change files or run commands. If the job needs a change, say exactly what you would change.',
-  auto: 'PERMISSION: AUTO. You can edit files in the project. Plain commands (tests, build, git status) run by themselves; anything riskier asks the user first, and the user may say no. Do not say you lack permission unless a tool result says so.',
+  auto: 'PERMISSION: AUTO. You can edit files in the project. You can run commands (tests, build, git, starting a server) by yourself; only destructive ones (deleting folders, system changes, force push) ask the user first, and the user may say no. Do not say you lack permission unless a tool result says so.',
   full: 'PERMISSION: FULL ACCESS is ON. You can edit any file and run any command in the project folder without asking. Do not tell the user to turn Full access on, it already is.',
 };
 

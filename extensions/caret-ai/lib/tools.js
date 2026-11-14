@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const { spawn, execFile } = require('child_process');
-const { isSafe } = require('./perm');
+const { isDangerous } = require('./perm');
 
 const fn = (name, description, properties, required = []) => ({ type: 'function', function: { name, description, parameters: { type: 'object', properties, required } } });
 
@@ -158,8 +158,8 @@ async function execute(name, args, run) {
       const command = String(args.command || '');
       if (run.perm === 'full') return runShell(command, root, run.signal);
       if (run.perm === 'auto') {
-        // plain commands (tests, build, git status...) run by themselves; the rest asks the user first
-        if (!isSafe(command) && !(run.confirm && await run.confirm('Run this command?', command))) return 'The user did not allow this command. Do not run it another way; tell the user what you wanted to do and why.';
+        // Auto runs commands by itself; only destructive ones (deleting folders, system changes, force push...) ask first
+        if (isDangerous(command) && !(run.confirm && await run.confirm('Run this dangerous command?', command))) return 'The user did not allow this command. Do not run it another way; tell the user what you wanted to do and why.';
         return runShell(command, root, run.signal);
       }
       return 'Not allowed: this session is Read only, so commands and file changes are off. Tell the user to switch to Auto or Full access if they want you to change or run anything.';
