@@ -9,7 +9,8 @@ const { spawn, execFile } = require('child_process');
 const cli = require('./cli');
 const aeble = require('./aeble');
 
-const BASE = { host: '127.0.0.1', port: 11434 };
+// OLLAMA_HOST (host:port) is Ollama's own setting; it also lets the tests talk to a second Ollama on another port.
+const BASE = (() => { const m = /^(?:https?:\/\/)?([^:\/]+)?(?::(\d+))?/.exec(process.env.OLLAMA_HOST || ''); return { host: (m && m[1]) || '127.0.0.1', port: Number((m && m[2]) || 11434) }; })();
 
 // Plain http on purpose: fetch() gives up after 5 minutes of silence, which a slow computer reading a long prompt can exceed.
 function request(method, urlPath, body, { onLine, signal, timeout } = {}) {
