@@ -20,7 +20,6 @@ const MODE_NOTE = {
   agent: 'TASK LIST (required). For any job that builds or changes files, your FIRST message, before any tool call, is the task list: 3 to 7 short independent tasks, one line each, each line starting with `[ ] `. AGENT MODE: do NOT work through the tasks one by one. Start one sub-agent (the Task tool) per task, all in the same message so they run in parallel, and tell each exactly what to do. When a sub-agent returns, write one line `[x] ` followed by the same task text. Write nothing else about the list. Only a plain question or a one-line fix may skip the list.',
 };
 const IMG_RE = /^data:image\/(png|jpeg|webp|gif);base64,([A-Za-z0-9+/=]+)$/;
-const SYSTEM = 'You are the coding assistant inside Caret IDE, working in the open folder. Be direct and concise. Make the change when asked; say what you changed in one or two sentences.';
 
 class Chat {
   constructor(ctx) {
@@ -43,6 +42,7 @@ class Chat {
     }
     this.orKey = await this.ctx.secrets.get('caret.orkey');
     await this.migrate(); await this.adopt();
+    if (this.moveHist()) await this.ctx.globalState.update('caret.allchats', this.chats);
     this.push(); this.applyPending();
     this.loadModels();
   }
@@ -109,10 +109,55 @@ class Chat {
   state() {
     return {
       type: 'state', account: this.account, models: MODELS, or: { connected: !!this.orKey }, root: this.root ? path.basename(this.root) : null,
-      busy: !!this.run, last: MODELS.some(m => m.id === this.ctx.globalState.get('caret.model')) ? this.ctx.globalState.get('caret.model') : (MODELS[0] ? MODELS[0].id : ''), mode: MODES.includes(this.ctx.globalState.get('caret.mode')) ? this.ctx.globalState.get('caret.mode') : 'code', full: !!this.ctx.globalState.get('caret.full'),
+      busy: !!this.run, last: MODELS.some(m => m.id === this.ctx.globalState.get('caret.model')) ? this.ctx.globalState.get('caret.model') : (MODELS[0] ? MODELS[0].id : ''), mode: MODES.includes(this.ctx.globalState.get('caret.mode')) ? this.ctx.globalState.get('caret.mode') : 'code', perm: this.perm(),
     };
   }
   blank() { return { id: Date.now().toString(36), title: '', session: null, at: Date.now(), msgs: [], hist: [] }; }
+
+  // What the AI may do: readonly (read and search only), auto (edits, safe commands; asks before risky ones), full (everything).
+  perm() {
+    const p = this.ctx.globalState.get('caret.perm');
+    if (['readonly', 'auto', 'full'].includes(p)) return p;
+    return this.ctx.globalState.get('caret.full') ? 'full' : 'auto';   // older versions had only a Full access switch
+  }
+  async setPerm(p) {
+    if (!['readonly', 'auto', 'full'].includes(p)) return;
+    if (p === 'full' && !vscode.workspace.isTrusted) {
+      this.push();   // the menu keeps showing what is really set
+      const pick = await vscode.window.showWarningMessage('This folder is not trusted yet. Full access lets the AI run any command in it. Trust the folder first, only if you know what is in it.', { modal: true }, 'Trust this folder');
+      if (pick === 'Trust this folder') { this.wantFull = true; vscode.commands.executeCommand('workbench.trust.manage'); }
+      return;
+    }
+    await this.ctx.globalState.update('caret.perm', p);
+    this.push();
+  }
+  async ask(title, detail) {
+    const pick = await vscode.window.showWarningMessage(title, { modal: true, detail: String(detail || '').slice(0, 1500) }, 'Allow');
+    return pick === 'Allow';
+  }
+
+  // The whole session the model sees (messages and tool results) lives in one file per chat, not in the settings database.
+  histFile(id) { return path.join(this.ctx.globalStorageUri.fsPath, 'hist', String(id).replace(/[^a-z0-9]/gi, '') + '.json'); }
+  loadHist(c) {
+    if (Array.isArray(c.hist)) return c.hist;
+    try { c.hist = JSON.parse(fs.readFileSync(this.histFile(c.id), 'utf8')); } catch { c.hist = []; }
+    return c.hist;
+  }
+  saveHist(c) {
+    try { const f = this.histFile(c.id); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify(c.hist || [])); } catch {}
+  }
+  moveHist() {   // older versions kept a short copy of each chat inside the settings database
+    let moved = false;
+    for (const c of this.chats) if (Array.isArray(c.hist)) { if (c.hist.length && !fs.existsSync(this.histFile(c.id))) this.saveHist(c); c.hist = undefined; moved = true; }
+    return moved;
+  }
+  dropOldHist() {
+    try {
+      const dir = path.dirname(this.histFile('x'));
+      const keep = new Set(this.chats.map(c => this.histFile(c.id)));
+      for (const f of fs.readdirSync(dir)) { const p = path.join(dir, f); if (!keep.has(p)) fs.rmSync(p, { force: true }); }
+    } catch {}
+  }
   get session() { return this.cur.session; }
   titleNow() { try { if (this.view) this.view.title = this.cur.title || 'New chat'; } catch {} }
   // Keep finished chats in the workspace so the history list can bring them back.
@@ -122,7 +167,9 @@ class Chat {
     this.cur.at = Date.now();
     this.cur.root = this.root; this.cur.folder = this.root ? path.basename(this.root) : '';
     this.chats = [this.cur, ...this.chats.filter(c => c.id !== this.cur.id)].slice(0, 200);
-    await this.ctx.globalState.update('caret.allchats', this.chats);
+    await this.ctx.globalState.update('caret.allchats', this.chats.map(c => ({ ...c, hist: undefined })));
+    if (Array.isArray(this.cur.hist)) this.saveHist(this.cur);
+    this.dropOldHist();
   }
   async newChat() {
     await this.save();
@@ -181,7 +228,7 @@ class Chat {
       case 'logout': { const t = await this.ctx.secrets.get('caret.token'); if (t) await auth.logout(t); await this.clearAccount(); await this.wipeSettings(); this.push(); this.changed(); break; }
       case 'openSettings': vscode.commands.executeCommand('caret.openSettings', m.section); break;
       case 'setModel': if (MODELS.some(x => x.id === m.id)) await this.ctx.globalState.update('caret.model', m.id); break;
-      case 'setFull': await this.ctx.globalState.update('caret.full', !!m.full); break;
+      case 'setPerm': await this.setPerm(m.perm); break;
       case 'setMode': if (MODES.includes(m.mode)) await this.ctx.globalState.update('caret.mode', m.mode); break;
       case 'openFile': this.openFile(String(m.path || '')); break;
     }
@@ -233,8 +280,11 @@ class Chat {
     if (!pick) { this.post({ type: 'error', text: 'The model list is not loaded yet. Check your internet connection and try again.' }); return; }
     if (pick.tool === 'openrouter' && !this.orKey) { this.post({ type: 'error', text: 'Connect your AI account first (the button above the message box).' }); return; }
     const mode = MODES.includes(m.mode) ? m.mode : 'code';
-    const full = !!m.full && vscode.workspace.isTrusted;   // no Full access in a folder that is not trusted
-    if (m.full && !full) this.post({ type: 'error', text: 'This folder is not trusted, so Full access is off for this message. Trust the folder (the Restricted Mode badge at the bottom) to use it.' });
+    let perm = this.perm();
+    if (perm === 'full' && !vscode.workspace.isTrusted) {   // trust can be taken away after Full access was chosen
+      perm = 'auto'; await this.ctx.globalState.update('caret.perm', 'auto'); this.push();
+      this.post({ type: 'error', text: 'This folder is not trusted, so Full access was switched back to Auto.' });
+    }
     if (!this.root) { this.post({ type: 'error', text: 'Open a folder first (File, Open Folder).' }); return; }
     // Pasted pictures go to a temporary folder; the tools read them from there.
     const files = [];
@@ -250,8 +300,7 @@ class Chat {
       });
     }
     const attach = files.length ? 'Attached image files (open them with the Read tool):\n' + files.map(f => '- ' + f).join('\n') + '\n\n' : '';
-    const prompt = (m.withContext ? this.context() : '') + attach + text;
-    const system = SYSTEM + (MODE_NOTE[mode] ? '\n\n' + MODE_NOTE[mode] : '');
+    const prompt = this.context() + attach + text;   // the open file and the selection go along with every message
     const msgs = this.cur.msgs;
     if (!msgs.length) { this.cur.title = text.replace(/\s+/g, ' ').slice(0, 40); this.titleNow(); }
     msgs.push({ r: 'user', t: text.slice(0, 8000), n: files.length });
@@ -267,16 +316,15 @@ class Chat {
         this.post({ type: 'tool', tool: t });
       },
       thinking: t => this.post({ type: 'thinking', text: String(t).slice(0, 4000) }),
+      status: t => this.post({ type: 'status', text: String(t).slice(0, 200) }),
       file: f => this.post({ type: 'file', path: path.isAbsolute(f) && this.root ? path.relative(this.root, f) : f }),
     };
     this.post({ type: 'start', mode });
     try {
-      const rmode = mode === 'plan' ? 'plan' : (full ? 'auto' : 'edit');   // Full access: the tool asks for nothing
-      this.run = runAgent({ key: this.orKey, model: pick.model, mode: rmode, prompt, system: mode === 'plan' ? MODE_NOTE.plan : '', history: this.cur.hist || [], cwd: this.root, full: rmode === 'auto', numCtx: pick.ctx, on });
+      this.run = runAgent({ key: this.orKey, model: pick.model, mode, perm, prompt, system: mode === 'plan' ? MODE_NOTE.plan : '', history: this.loadHist(this.cur), cwd: this.root, numCtx: pick.ctx, confirm: (title, detail) => this.ask(title, detail), on });
       this.push();
       const r = await this.run.done;
-      if (r.sessionId) this.cur.session = r.sessionId;
-      if (pick.tool === 'openrouter') this.cur.hist = [...(this.cur.hist || []), { role: 'user', content: text.slice(0, 4000) }, { role: 'assistant', content: (r.answer || '(worked on files)').slice(0, 4000) }].slice(-12);
+      if (Array.isArray(r.messages)) this.cur.hist = r.messages;   // the whole session, summarized by the agent when it gets long
       await this.save();
       this.post({ type: 'done', error: r.error || null, plan: mode === 'plan' && !r.error });
     } catch (e) { this.post({ type: 'done', error: String(e.message || e) }); }
@@ -295,6 +343,7 @@ function activate(ctx) {
     vscode.commands.registerCommand('caret.signIn', () => chat.login()),
     vscode.commands.registerCommand('caret.openSettings', section => settings.show(ctx, chat, typeof section === 'string' ? section : 'account')),
     vscode.commands.registerCommand('caret.signOut', () => chat.onMessage({ type: 'logout' })),
+    vscode.workspace.onDidGrantWorkspaceTrust(() => { if (chat.wantFull) { chat.wantFull = false; chat.setPerm('full'); } }),
   );
   chat.onAccount = () => {
     welcome.refresh(chat);

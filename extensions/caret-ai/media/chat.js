@@ -2,9 +2,8 @@
   const vscode = acquireVsCodeApi();
   const app = document.getElementById('app');
   const logo = document.body.dataset.logo;
-  let S = { account: null, models: [], tools: {}, busy: false, last: 'sonnet-5-5', mode: 'code', full: false, root: null };
+  let S = { account: null, models: [], tools: {}, busy: false, last: 'sonnet-5-5', mode: 'code', perm: 'auto', root: null };
   let pending = [];   // pasted pictures waiting to be sent (data URLs)
-  let ctxOn = true;
   let curAi = null, curText = '';
   const tools = new Map();
   let runMode = 'code', grp = null;
@@ -58,17 +57,19 @@
   const closeMenus = except => { for (const m of openMenus) if (m !== except) m.close(); };
   document.addEventListener('click', e => { for (const m of openMenus) if (!m.el.contains(e.target)) m.close(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenus(); });
-  function dropdown({ cls, title, onpick }) {
+  const iconEl = svg => { const e = h('span', { class: 'ic' }); e.innerHTML = svg; return e; };   // svg is one of our own constants
+  function dropdown({ cls, title, onpick, align }) {
     let items = [], value = '';
     const btn = h('button', { class: 'dd ' + cls, type: 'button', title: title || '' });
-    const pop = h('div', { class: 'pop', role: 'listbox', hidden: '' });
+    const pop = h('div', { class: 'pop' + (align === 'right' ? ' right' : ''), role: 'listbox', hidden: '' });
     const el = h('div', { class: 'ddw' }, btn, pop);
     const api = { el, close() { pop.hidden = true; openMenus.delete(api); } };
     const paint = () => {
       const cur = items.find(i => i.value === value) || items[0];
-      btn.replaceChildren(h('span', { text: cur ? cur.label : '' }));
+      btn.replaceChildren(...(cur && cur.icon ? [iconEl(cur.icon)] : []), h('span', { text: cur ? cur.label : '' }));
       btn.insertAdjacentHTML('beforeend', CHEV);
       pop.replaceChildren(...items.map((i, n) => h('button', { class: 'opt' + (i.value === value ? ' sel' : ''), type: 'button', role: 'option', title: i.compact ? (i.desc || '') : '', onclick: () => { value = i.value; api.close(); paint(); onpick(i.value); } },
+        i.icon ? iconEl(i.icon) : null,
         h('span', { class: 'ol' }, h('span', { class: 'onr' }, h('span', { class: 'on', text: i.label }), i.badge ? h('span', { class: 'badge', text: i.badge }) : null), i.desc && !i.compact ? h('span', { class: 'od', text: i.desc }) : null),
         h('span', { class: 'ckn' }, h('span', { class: 'ck', text: i.value === value ? '\u2713' : '' }), i.compact ? h('span', { class: 'num', text: String(n + 1) }) : null))));
     };
@@ -85,17 +86,21 @@
     { value: 'agent', label: 'Agent', desc: 'Like Code, with the work split between sub-agents.' },
   ]);
   modeSel.value = 'code';
-  const SHIELD = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V6z"/></svg>';
-  const fullBtn = h('button', { class: 'fullbtn', title: 'Full access: accept everything without asking (writing files, running commands, switching from Plan to Code). Use it in folders you trust.', onclick: () => { S.full = !S.full; vscode.postMessage({ type: 'setFull', full: S.full }); build(); } });
-  fullBtn.innerHTML = SHIELD + '<span>Full access</span>';
-  const CLIP = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l9-9a3.7 3.7 0 0 1 5.2 5.2l-9 9a1.8 1.8 0 0 1-2.6-2.6l8.2-8.2"/></svg>';
-  const ctxBtn = h('button', { class: 'tg on', title: 'Include the open file and selection', onclick: () => { ctxOn = !ctxOn; ctxBtn.classList.toggle('on', ctxOn); } });
-  ctxBtn.innerHTML = CLIP;
+  // What the AI may do: Read only, Auto (edits and safe commands, asks before risky ones), Full access (everything).
+  const ICO = d => '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + d + '</svg>';
+  const SHIELD_PATH = '<path d="M12 3l8 3v6c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V6z"/>';
+  const permSel = dropdown({ cls: 'perm', title: 'What the AI may do', align: 'right', onpick: v => { S.perm = v; vscode.postMessage({ type: 'setPerm', perm: v }); } });
+  permSel.setItems([
+    { value: 'readonly', label: 'Read only', desc: 'Only reads and searches your code. Changes nothing.', icon: ICO('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>') },
+    { value: 'auto', label: 'Auto', desc: 'Edits files and runs safe commands by itself. Asks before risky ones.', icon: ICO(SHIELD_PATH) },
+    { value: 'full', label: 'Full access', desc: 'Runs everything without asking. Use it in folders you trust.', icon: ICO(SHIELD_PATH + '<path d="M12 8v4M12 16h.01"/>') },
+  ]);
+  permSel.value = 'auto';
   const sendBtn = h('button', { class: 'send', title: 'Send (Enter)', onclick: () => (S.busy ? vscode.postMessage({ type: 'stop' }) : send()) });
   const SEND = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
   const STOP = '<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>';
   const thumbs = h('div', { class: 'thumbs' });
-  const composer = h('div', { class: 'composer' }, thumbs, input, h('div', { class: 'row' }, modeSel, modelSel, h('span', { class: 'grow' }), fullBtn, ctxBtn, sendBtn));
+  const composer = h('div', { class: 'composer' }, thumbs, input, h('div', { class: 'row' }, modeSel, modelSel, h('span', { class: 'grow' }), permSel, sendBtn));
   const note = h('div', { class: 'note' });
 
   function hello() {
@@ -114,7 +119,7 @@
     modelSel.setItems(S.models.map(m => ({ value: m.id, label: m.label, desc: m.desc, compact: true })));
     modelSel.value = S.last;
     modeSel.value = S.mode;
-    fullBtn.classList.toggle('on', !!S.full);
+    permSel.value = S.perm || 'auto';
     sendBtn.innerHTML = S.busy ? STOP : SEND; sendBtn.classList.toggle('empty', !S.busy && !input.value.trim() && !pending.length); sendBtn.title = S.busy ? 'Stop' : 'Send (Enter)';
     // OpenRouter: the user signs in once; the models are paid from their own OpenRouter credits.
     if (!(S.or && S.or.connected)) note.replaceChildren(h('button', { class: 'btn', text: 'Add your API key', title: 'Opens Settings, AI', onclick: () => vscode.postMessage({ type: 'openSettings', section: 'ai' }) }));
@@ -144,7 +149,7 @@
     pending = []; drawThumbs();
     curAi = null; curText = ''; hadList = false; todoCards.clear(); tasks = []; grp = null; runMode = modeSel.value; scroll();
     setStatus('Thinking');
-    vscode.postMessage({ type: 'send', text: text || 'See the attached picture.', images: imgs, model: modelSel.value, mode: modeSel.value, full: !!S.full, withContext: ctxOn });
+    vscode.postMessage({ type: 'send', text: text || 'See the attached picture.', images: imgs, model: modelSel.value, mode: modeSel.value });
   }
   input.addEventListener('paste', e => {
     const items = [...(e.clipboardData?.items || [])].filter(i => i.kind === 'file' && /^image\//.test(i.type));
@@ -270,7 +275,7 @@
       setStatus(null); if (tasks.length) drawTasks(false);
       document.querySelectorAll('details.thought.live').forEach(e => { e.classList.remove('live'); e.querySelector('summary').textContent = 'Thought'; });
       if (m.error) feed.append(h('div', { class: 'err', text: m.error }));
-      else if (m.plan && tasks.length && S.full) { S.mode = 'code'; modeSel.value = 'code'; vscode.postMessage({ type: 'setMode', mode: 'code' }); send('Go ahead and build the plan above.'); }
+      else if (m.plan && tasks.length && S.perm === 'full') { S.mode = 'code'; modeSel.value = 'code'; vscode.postMessage({ type: 'setMode', mode: 'code' }); send('Go ahead and build the plan above.'); }
       else if (m.plan && tasks.length) {
         const go = mode => { S.mode = mode; modeSel.value = mode; vscode.postMessage({ type: 'setMode', mode }); card.remove(); send('Go ahead and build the plan above.'); };
         const card = h('div', { class: 'plan' }, h('div', { text: 'Plan ready. Switch to a coding mode to build it?' }),

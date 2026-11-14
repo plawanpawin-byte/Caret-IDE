@@ -70,9 +70,14 @@ button, select, textarea { font: inherit; color: inherit; }
 .note b { color: var(--hi); font-weight: 500; }
 .note a { color: #4aa3f0; cursor: pointer; }
 
-.fullbtn { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: #6e6e6e; cursor: pointer; font-size: 11.5px; white-space: nowrap; }
-.fullbtn:hover { color: #cfcfcf; background: #ffffff12; }
-.fullbtn.on { color: #f0b060; border-color: #5a4220; background: #2a2012; }
+.dd.perm { background: transparent; color: #8d8a84; padding: 3px 6px; border-radius: 10px; font-size: 12px; white-space: nowrap; }
+.dd.perm:hover { color: var(--hi); background: #ffffff12; }
+.dd .ic, .opt .ic { display: grid; place-items: center; flex: none; }
+.dd .ic svg { opacity: .9; }
+.pop.right { left: auto; right: 0; width: min(280px, calc(100cqw - 16px)); max-width: none; }
+.pop.right .opt { justify-content: flex-start; gap: 12px; padding: 9px 10px; }
+.pop.right .opt .ol { flex: 1; }
+.opt .ic { color: #a8a5a0; }
 
 /* round menus */
 .ddw { position: relative; }
@@ -97,27 +102,26 @@ button, select, textarea { font: inherit; color: inherit; }
 
 .row { flex-wrap: nowrap; gap: 4px; }
 .row .grow { flex: 1; min-width: 0; }
-.fullbtn { padding: 0 7px; flex: none; }
+.ddw:has(.dd.perm) { flex: none; }
 .dd.plain { max-width: 100%; }
 .dd.plain span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ddw { flex: none; min-width: 0; }
 .ddw:has(.dd.plain) { flex: 0 1 auto; min-width: 20px; max-width: 130px; }
 .ddw:has(.dd.plain) .dd { max-width: 100%; }
-@container (max-width: 400px) { .fullbtn span { display: none; } }
 .composer { container-type: inline-size; }
 @container (max-width: 260px) {
   .row { padding: 2px 6px 6px; gap: 3px; }
   .row .grow { display: none; }
   .ddw:has(.dd.plain) { flex: 1 1 0; max-width: none; min-width: 0; }
   .dd.pill { padding: 3px 7px 3px 9px; }
-  .fullbtn { padding: 0 5px; }
+  .dd.perm > span:not(.ic) { display: none; }
 }
 @container (max-width: 190px) {
   .ddw:has(.dd.plain) { display: none; }
   .row { justify-content: space-between; }
 }
 @container (max-width: 165px) {
-  .row .fullbtn, .row .tg { display: none; }
+  .ddw:has(.dd.perm) { display: none; }
 }
 
 /* live status, tasks, thinking */

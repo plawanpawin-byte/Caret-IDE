@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const { spawn, execFile } = require('child_process');
+const { isSafe } = require('./perm');
 
 const fn = (name, description, properties, required = []) => ({ type: 'function', function: { name, description, parameters: { type: 'object', properties, required } } });
 
@@ -43,8 +44,15 @@ function safe(root, p, write, full) {
   const abs = path.resolve(root, String(p || '.'));
   // a link (symlink or junction) inside the project must not lead outside it
   if (!inside(root, abs) || !inside(real(root), real(abs))) throw new Error('That path is outside the project folder.');
-  if (write && !full && PROTECTED.test(path.relative(root, abs))) throw new Error('Not allowed: files in ' + path.relative(root, abs).split(/[\\/]/)[0] + ' can run code by themselves, so changing them needs Full access. Tell the user.');
   return abs;
+}
+// Writing into a folder whose files can run by themselves: Full access does it, Auto asks the user first, Read only never gets here.
+async function guardWrite(root, abs, run) {
+  const rel = path.relative(root, abs);
+  if (!PROTECTED.test(rel) || run.perm === 'full') return;
+  const name = rel.split(/[\\/]/)[0];
+  const ok = run.perm === 'auto' && run.confirm && await run.confirm('Change a file in ' + name + '?', rel + '\n\nFiles in ' + name + ' can run code by themselves (git hooks, editor tasks, CI jobs).');
+  if (!ok) throw new Error('The user did not allow changing ' + rel + '. Do not try another way to change it.');
 }
 
 function numbered(text, start, end) {
@@ -77,7 +85,8 @@ function walk(root, dir, out, limit) {
 function runShell(command, cwd, signal) {
   return new Promise(resolve => {
     const win = process.platform === 'win32';
-    const p = spawn(win ? 'cmd.exe' : 'sh', win ? ['/d', '/s', '/c', command] : ['-c', command], { cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    // On Windows the command goes to cmd.exe word for word (windowsVerbatimArguments), otherwise quotes inside it get mangled.
+    const p = spawn(win ? 'cmd.exe' : 'sh', win ? ['/d', '/s', '/c', '"' + command + '"'] : ['-c', command], { cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], windowsVerbatimArguments: win });
     let out = '', done = false;
     const add = d => { out += d; if (out.length > 20000) out = out.slice(0, 8000) + '\n…\n' + out.slice(-8000); };
     p.stdout.on('data', add); p.stderr.on('data', add);
@@ -120,7 +129,8 @@ async function execute(name, args, run) {
       return hits.length ? hits.join('\n') : 'No matches.';
     }
     case 'write_file': {
-      const abs = safe(root, args.path, true, run.full);
+      const abs = safe(root, args.path);
+      await guardWrite(root, abs, run);
       const content = String(args.content ?? '');
       fs.mkdirSync(path.dirname(abs), { recursive: true });
       fs.writeFileSync(abs, content);
@@ -129,7 +139,8 @@ async function execute(name, args, run) {
       return `Wrote ${rel} (${content.split('\n').length} lines).` + syntaxNote(rel, content);
     }
     case 'edit_file': {
-      const abs = safe(root, args.path, true, run.full);
+      const abs = safe(root, args.path);
+      await guardWrite(root, abs, run);
       let text; try { text = fs.readFileSync(abs, 'utf8'); } catch { throw new Error('That file does not exist. Use write_file to create it.'); }
       const oldT = String(args.old_text ?? ''), newT = String(args.new_text ?? '');
       if (!oldT) throw new Error('old_text is empty.');
@@ -144,8 +155,14 @@ async function execute(name, args, run) {
       return `Edited ${rel}.` + syntaxNote(rel, next);
     }
     case 'run_command': {
-      if (!run.full) return 'Not allowed: running commands needs Full access. Tell the user to turn on Full access (the shield button) if they want you to run or test the code.';
-      return runShell(String(args.command || ''), root, run.signal);
+      const command = String(args.command || '');
+      if (run.perm === 'full') return runShell(command, root, run.signal);
+      if (run.perm === 'auto') {
+        // plain commands (tests, build, git status...) run by themselves; the rest asks the user first
+        if (!isSafe(command) && !(run.confirm && await run.confirm('Run this command?', command))) return 'The user did not allow this command. Do not run it another way; tell the user what you wanted to do and why.';
+        return runShell(command, root, run.signal);
+      }
+      return 'Not allowed: this session is Read only, so commands and file changes are off. Tell the user to switch to Auto or Full access if they want you to change or run anything.';
     }
     case 'update_tasks': return 'ok';
     default: throw new Error('Unknown tool ' + name);
