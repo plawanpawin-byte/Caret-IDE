@@ -4,104 +4,35 @@
   "description": "AI chat and agent inside Caret IDE.",
   "version": "0.1.0",
   "publisher": "caret",
-  "engines": {
-    "vscode": "^1.90.0"
-  },
+  "engines": { "vscode": "^1.90.0" },
   "main": "./extension.js",
-  "capabilities": {
-    "untrustedWorkspaces": {
-      "supported": "limited",
-      "description": "In a folder you have not trusted, Caret AI works but Full access is switched off."
-    },
-    "virtualWorkspaces": true
-  },
-  "activationEvents": [
-    "onStartupFinished"
-  ],
+  "capabilities": { "untrustedWorkspaces": { "supported": "limited", "description": "In a folder you have not trusted, Caret AI works but Full access is switched off." }, "virtualWorkspaces": true },
+  "activationEvents": ["onStartupFinished"],
   "contributes": {
     "viewsContainers": {
-      "secondarySidebar": [
-        {
-          "id": "caret",
-          "title": "Caret AI",
-          "icon": "media/caret.svg"
-        }
-      ]
+      "secondarySidebar": [{ "id": "caret", "title": "Caret AI", "icon": "media/caret.svg" }]
     },
     "views": {
-      "caret": [
-        {
-          "type": "webview",
-          "id": "caret.chat",
-          "name": "Caret AI"
-        }
-      ]
+      "caret": [{ "type": "webview", "id": "caret.chat", "name": "Caret AI" }]
     },
     "commands": [
-      {
-        "command": "caret.welcome",
-        "title": "Caret: Welcome"
-      },
-      {
-        "command": "caret.openChat",
-        "title": "Caret: Open Chat"
-      },
-      {
-        "command": "caret.openWindow",
-        "title": "Caret: Open Agent Window",
-        "icon": "$(multiple-windows)"
-      },
-      {
-        "command": "caret.newChat",
-        "title": "Caret: New Chat",
-        "icon": "$(add)"
-      },
-      {
-        "command": "caret.history",
-        "title": "Caret: Chat History",
-        "icon": "$(history)"
-      },
-      {
-        "command": "caret.signIn",
-        "title": "Caret: Log In"
-      },
-      {
-        "command": "caret.openSettings",
-        "title": "Caret: Settings"
-      },
-      {
-        "command": "caret.signOut",
-        "title": "Caret: Log Out"
-      }
+      { "command": "caret.welcome", "title": "Caret: Welcome" },
+      { "command": "caret.openChat", "title": "Caret: Open Chat" },
+      { "command": "caret.newChat", "title": "Caret: New Chat", "icon": "$(add)" },
+      { "command": "caret.history", "title": "Caret: Chat History", "icon": "$(history)" },
+      { "command": "caret.signIn", "title": "Caret: Log In" },
+      { "command": "caret.openSettings", "title": "Caret: Settings" },
+      { "command": "caret.signOut", "title": "Caret: Log Out" }
     ],
     "menus": {
       "view/title": [
-        {
-          "command": "caret.newChat",
-          "when": "view == caret.chat",
-          "group": "navigation@1"
-        },
-        {
-          "command": "caret.history",
-          "when": "view == caret.chat",
-          "group": "navigation@2"
-        },
-        {
-          "command": "caret.openWindow",
-          "when": "view == caret.chat",
-          "group": "navigation@3"
-        }
+        { "command": "caret.newChat", "when": "view == caret.chat", "group": "navigation@1" },
+        { "command": "caret.history", "when": "view == caret.chat", "group": "navigation@2" }
       ]
     },
     "keybindings": [
-      {
-        "command": "caret.openChat",
-        "key": "ctrl+l"
-      },
-      {
-        "command": "caret.newChat",
-        "key": "ctrl+shift+l"
-      }
+      { "command": "caret.openChat", "key": "ctrl+l" },
+      { "command": "caret.newChat", "key": "ctrl+shift+l" }
     ]
   }
 }

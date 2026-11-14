@@ -37,7 +37,6 @@ async function show(ctx, chat) {
     switch (m?.type) {
       case 'ready': send(chat); break;
       case 'openFolder': vscode.commands.executeCommand('workbench.action.files.openFolder'); break;
-      case 'openAgents': vscode.commands.executeCommand('caret.openWindow'); break;
       case 'clone': vscode.commands.executeCommand('git.clone'); break;
       case 'newFile': vscode.commands.executeCommand('workbench.action.files.newUntitledFile'); break;
       case 'login': chat.login(); break;

@@ -25,7 +25,7 @@ const SYSTEM = 'You are the coding assistant inside Caret IDE, working in the op
 
 class Chat {
   constructor(ctx) {
-    this.ctx = ctx; this.view = null; this.panels = new Set(); this.run = null; this.account = null;
+    this.ctx = ctx; this.view = null; this.run = null; this.account = null;
     this.chats = ctx.globalState.get('caret.allchats') || [];
     this.pending = ctx.globalState.get('caret.pendingChat') || null;
     this.cur = this.blank();
@@ -107,18 +107,16 @@ class Chat {
     await this.ctx.globalState.update('caret.login', undefined);
   }
 
-  branch() { try { const h = fs.readFileSync(path.join(this.root, '.git', 'HEAD'), 'utf8').trim(); return h.startsWith('ref:') ? h.replace('ref: refs/heads/', '') : h.slice(0, 7); } catch { return ''; } }
-
   state() {
     return {
-      type: 'state', account: this.account, models: MODELS, or: { connected: !!this.orKey }, root: this.root ? path.basename(this.root) : null, branch: this.branch(),
+      type: 'state', account: this.account, models: MODELS, or: { connected: !!this.orKey }, root: this.root ? path.basename(this.root) : null,
       tools: { claude: !!cli.resolveCli('claude'), codex: !!cli.resolveCli('codex') },
       busy: !!this.run, last: MODELS.some(m => m.id === this.ctx.globalState.get('caret.model')) ? this.ctx.globalState.get('caret.model') : (MODELS[0] ? MODELS[0].id : ''), mode: MODES.includes(this.ctx.globalState.get('caret.mode')) ? this.ctx.globalState.get('caret.mode') : 'code', full: !!this.ctx.globalState.get('caret.full'),
     };
   }
   blank() { return { id: Date.now().toString(36), title: '', session: null, at: Date.now(), msgs: [], hist: [] }; }
   get session() { return this.cur.session; }
-  titleNow() { try { for (const v of [this.view, ...this.panels]) if (v) v.title = this.cur.title || 'New chat'; } catch {} }
+  titleNow() { try { if (this.view) this.view.title = this.cur.title || 'New chat'; } catch {} }
   // Keep finished chats in the workspace so the history list can bring them back.
   async save() {
     if (!this.cur.msgs.length || !this.me()) return;
@@ -127,12 +125,11 @@ class Chat {
     this.cur.root = this.root; this.cur.folder = this.root ? path.basename(this.root) : '';
     this.chats = [this.cur, ...this.chats.filter(c => c.id !== this.cur.id)].slice(0, 200);
     await this.ctx.globalState.update('caret.allchats', this.chats);
-    this.sendSessions();
   }
   async newChat() {
     await this.save();
     this.cur = this.blank();
-    this.post({ type: 'cleared' }); this.titleNow(); this.sendSessions();
+    this.post({ type: 'cleared' }); this.titleNow();
   }
   // History is grouped by folder (small grey folder names). Picking a chat from another folder opens that folder and the chat.
   async history() {
@@ -149,11 +146,7 @@ class Chat {
     }
     const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Chat history' });
     if (!pick || !pick.id || this.run) return;
-    await this.openChat(pick.id);
-  }
-  async openChat(id) {
-    if (this.run) return;
-    const c = this.mine().find(x => x.id === id);
+    const c = this.mine().find(x => x.id === pick.id);
     if (!c) return;
     if (c.root && c.root !== this.root) {
       if (!fs.existsSync(c.root)) { vscode.window.showWarningMessage('That folder no longer exists: ' + c.root); return; }
@@ -161,36 +154,23 @@ class Chat {
       await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(c.root), { forceNewWindow: false });
       return;
     }
-    this.cur = c; this.post({ type: 'load', msgs: c.msgs }); this.titleNow(); this.sendSessions();
+    this.cur = c; this.post({ type: 'load', msgs: c.msgs }); this.titleNow();
   }
-  sendSessions() {
-    this.post({ type: 'sessions', cur: this.cur.id, list: this.mine().slice(0, 60).map(c => ({ id: c.id, title: c.title || 'Chat', folder: c.folder || '', at: c.at })) });
-  }
-  push() { this.post(this.state()); this.sendSessions(); }
-  post(m) { for (const v of [this.view, ...this.panels]) { try { v?.webview.postMessage(m); } catch {} } }
+  push() { this.post(this.state()); }
+  post(m) { try { this.view?.webview.postMessage(m); } catch {} }
 
-  resolveWebviewView(view) { this.view = view; this.attach(view); view.onDidDispose(() => { this.view = null; }); }
-
-  // The Agent window: the same chat in an editor tab that is moved into its own window.
-  async openWindow() {
-    const media = vscode.Uri.joinPath(this.ctx.extensionUri, 'media');
-    const panel = vscode.window.createWebviewPanel('caret.agent', 'Caret Agents', vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [media] });
-    this.panels.add(panel); this.attach(panel, true);
-    panel.onDidDispose(() => this.panels.delete(panel));
-    await vscode.commands.executeCommand('workbench.action.moveEditorToNewWindow');
-  }
-
-  attach(view, agents) {
-    this.titleNow();
+  resolveWebviewView(view) {
+    this.view = view; this.titleNow();
     const media = vscode.Uri.joinPath(this.ctx.extensionUri, 'media');
     view.webview.options = { enableScripts: true, localResourceRoots: [media] };
     const w = view.webview, u = f => w.asWebviewUri(vscode.Uri.joinPath(media, f));
     const nonce = crypto.randomBytes(16).toString('base64');
     w.html = `<!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${w.cspSource} data:; style-src ${w.cspSource}; script-src 'nonce-${nonce}';">
-<link rel="stylesheet" href="${u('chat.css')}"></head><body ${agents ? 'data-agents="1" ' : ''}data-logo="${u('logo.png')}"><div id="app"></div>
+<link rel="stylesheet" href="${u('chat.css')}"></head><body data-logo="${u('logo.png')}"><div id="app"></div>
 <script nonce="${nonce}" src="${u('chat.js')}"></script></body></html>`;
     w.onDidReceiveMessage(m => this.onMessage(m));
+    view.onDidDispose(() => { this.view = null; });
   }
 
   async onMessage(m) {
@@ -201,9 +181,6 @@ class Chat {
       case 'newChat': await this.newChat(); break;
       case 'login': await this.login(); break;
       case 'logout': { const t = await this.ctx.secrets.get('caret.token'); if (t) await auth.logout(t); await this.clearAccount(); await this.wipeSettings(); this.push(); this.changed(); break; }
-      case 'openSession': if (typeof m.id === 'string') this.openChat(m.id); break;
-      case 'newSession': this.newChat(); break;
-      case 'openFolder': vscode.commands.executeCommand('workbench.action.files.openFolder'); break;
       case 'openSettings': vscode.commands.executeCommand('caret.openSettings', m.section); break;
       case 'setModel': if (MODELS.some(x => x.id === m.id)) await this.ctx.globalState.update('caret.model', m.id); break;
       case 'setFull': await this.ctx.globalState.update('caret.full', !!m.full); break;
@@ -314,7 +291,6 @@ function activate(ctx) {
   ctx.subscriptions.push(
     vscode.window.registerWebviewViewProvider('caret.chat', chat, { webviewOptions: { retainContextWhenHidden: true } }),
     vscode.commands.registerCommand('caret.openChat', () => vscode.commands.executeCommand('caret.chat.focus')),
-    vscode.commands.registerCommand('caret.openWindow', () => chat.openWindow()),
     vscode.commands.registerCommand('caret.newChat', () => { chat.newChat(); vscode.commands.executeCommand('caret.chat.focus'); }),
     vscode.commands.registerCommand('caret.history', () => chat.history()),
     vscode.commands.registerCommand('caret.welcome', () => welcome.show(ctx, chat)),

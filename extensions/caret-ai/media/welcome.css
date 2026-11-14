@@ -50,8 +50,3 @@ h1 { margin: 6px 0 2px; font-size: 26px; font-weight: 300; letter-spacing: .02em
 .keybox .btn2 { align-self: flex-start; }
 .setup .mbox { max-width: 430px; text-align: left; }
 .foot { display: flex; gap: 10px; margin-top: 22px; }
-
-.agentcard { margin: 22px auto 0; width: 100%; max-width: 420px; padding: 16px; border: 1px solid #262626; border-radius: 14px; background: #151515; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.agentcard b { color: #ecebe8; font-weight: 600; }
-.agentcard .new { margin-left: 8px; padding: 2px 8px; border-radius: 8px; background: #1f3a5a; color: #7fb6ee; font-size: 11px; }
-.agentcard p { margin: 0 0 6px; color: #8d8a84; }
