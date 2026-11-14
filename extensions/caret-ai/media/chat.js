@@ -100,6 +100,7 @@
 
   // Agents window: the same chat with a sessions list on the left and the prompt box in the middle of an empty page.
   const AG = !!document.body.dataset.agents;
+  if (AG) input.placeholder = 'Plan, Build, / for skills, @ for context';
   const side = h('aside', { class: 'side' });
   const stage = h('main', { class: 'stage' });
   let sess = { list: [], cur: '' };
@@ -114,7 +115,7 @@
   }
   function hello() {
     const who = S.account?.login;
-    if (AG) { feed.replaceChildren(h('div', { class: 'hello' }, h('h1', { text: who ? `Let\u2019s ship something, ${who}` : 'Caret IDE' }), S.root ? h('div', { class: 'chips' }, h('span', { class: 'chip', text: S.root })) : h('p', { text: 'Open a folder to start (File, Open Folder).' }))); return; }
+    if (AG) { feed.replaceChildren(h('div', { class: 'hello' }, h('h1', { text: who ? `Let\u2019s ship something, ${who}` : 'Caret IDE' }), S.root ? h('div', { class: 'chips' }, h('span', { class: 'chip', text: 'This Computer' }), h('span', { class: 'chip', text: S.root }), S.branch ? h('span', { class: 'chip', text: S.branch }) : null) : h('p', { text: 'Open a folder to start (File, Open Folder).' }))); return; }
     feed.replaceChildren(h('div', { class: 'hello' }, h('img', { src: logo, alt: '' }),
       h('h1', { text: who ? `Hey ${who}, what should we build today?` : 'Caret IDE' }),
       S.root ? null : h('p', { text: 'Open a folder to start (File, Open Folder).' })));

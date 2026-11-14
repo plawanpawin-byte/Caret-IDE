@@ -107,9 +107,11 @@ class Chat {
     await this.ctx.globalState.update('caret.login', undefined);
   }
 
+  branch() { try { const h = fs.readFileSync(path.join(this.root, '.git', 'HEAD'), 'utf8').trim(); return h.startsWith('ref:') ? h.replace('ref: refs/heads/', '') : h.slice(0, 7); } catch { return ''; } }
+
   state() {
     return {
-      type: 'state', account: this.account, models: MODELS, or: { connected: !!this.orKey }, root: this.root ? path.basename(this.root) : null,
+      type: 'state', account: this.account, models: MODELS, or: { connected: !!this.orKey }, root: this.root ? path.basename(this.root) : null, branch: this.branch(),
       tools: { claude: !!cli.resolveCli('claude'), codex: !!cli.resolveCli('codex') },
       busy: !!this.run, last: MODELS.some(m => m.id === this.ctx.globalState.get('caret.model')) ? this.ctx.globalState.get('caret.model') : (MODELS[0] ? MODELS[0].id : ''), mode: MODES.includes(this.ctx.globalState.get('caret.mode')) ? this.ctx.globalState.get('caret.mode') : 'code', full: !!this.ctx.globalState.get('caret.full'),
     };
