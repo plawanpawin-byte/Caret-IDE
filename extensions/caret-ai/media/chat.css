@@ -98,7 +98,7 @@ button, select, textarea { font: inherit; color: inherit; }
 .row { flex-wrap: nowrap; gap: 4px; }
 .row .grow { flex: 1; min-width: 0; }
 .fullbtn { padding: 0 7px; flex: none; }
-.dd.plain { max-width: 110px; }
+.dd.plain { max-width: 96px; }
 .dd.plain span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ddw { flex: none; min-width: 0; }
 @container (max-width: 300px) { .fullbtn span { display: none; } }
