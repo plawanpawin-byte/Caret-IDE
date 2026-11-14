@@ -105,6 +105,20 @@ button, select, textarea { font: inherit; color: inherit; }
 .ddw:has(.dd.plain) .dd { max-width: 100%; }
 @container (max-width: 400px) { .fullbtn span { display: none; } }
 .composer { container-type: inline-size; }
+@container (max-width: 260px) {
+  .row { padding: 2px 6px 6px; gap: 3px; }
+  .row .grow { display: none; }
+  .ddw:has(.dd.plain) { flex: 1 1 0; max-width: none; min-width: 0; }
+  .dd.pill { padding: 3px 7px 3px 9px; }
+  .fullbtn { padding: 0 5px; }
+}
+@container (max-width: 190px) {
+  .ddw:has(.dd.plain) { display: none; }
+  .row { justify-content: space-between; }
+}
+@container (max-width: 165px) {
+  .row .fullbtn, .row .tg { display: none; }
+}
 
 /* live status, tasks, thinking */
 .status { display: flex; align-items: center; gap: 8px; margin: 10px 0 4px; color: var(--mute); font-size: 12.5px; }
