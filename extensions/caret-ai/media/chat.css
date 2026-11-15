@@ -67,6 +67,20 @@ button, select, textarea { font: inherit; color: inherit; }
 .btn { border: 0; border-radius: 10px; padding: 7px 18px; background: #e9e7e2; color: #0b0b0b; cursor: pointer; font-weight: 600; }
 .btn.blue { background: var(--blue); color: #fff; }
 .note { margin: 0 12px 8px; color: var(--mute); font-size: 12px; }
+.connect { border: 1px solid #2a2a2a; border-radius: 14px; background: #181818; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.connect .ct { color: var(--hi); font-size: 14px; font-weight: 600; }
+.connect .cd { line-height: 1.45; }
+.connect .cs { margin: 0; padding-left: 18px; line-height: 1.6; }
+.connect .link { align-self: flex-start; background: none; border: 0; padding: 0; color: #4aa3f0; cursor: pointer; font: inherit; }
+.connect .link:hover { text-decoration: underline; }
+.connect .keyrow { display: flex; gap: 8px; }
+.connect .keyin { flex: 1; min-width: 0; border: 1px solid #2d2d2d; border-radius: 10px; background: #111; color: var(--hi); padding: 7px 10px; outline: 0; font: inherit; }
+.connect .keyin:focus { border-color: #4a4a4a; }
+.connect .btn { padding: 7px 14px; }
+.connect .btn:disabled { opacity: .45; cursor: default; }
+.connect .keyerr { color: #f07a6e; }
+.connect .keyerr:empty { display: none; }
+.composer.off { opacity: .5; pointer-events: none; }
 .note b { color: var(--hi); font-weight: 500; }
 .note a { color: #4aa3f0; cursor: pointer; }
 

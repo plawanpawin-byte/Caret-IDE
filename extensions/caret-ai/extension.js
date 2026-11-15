@@ -240,6 +240,7 @@ class Chat {
       case 'login': await this.login(); break;
       case 'logout': { const t = await this.ctx.secrets.get('caret.token'); if (t) await auth.logout(t); await this.clearAccount(); await this.wipeSettings(); this.push(); this.changed(); break; }
       case 'openSettings': vscode.commands.executeCommand('caret.openSettings', m.section); break;
+      case 'saveKey': case 'link': await require('./lib/aiconfig').handle(this, m, p => this.post(p)); break;
       case 'setModel': if (MODELS.some(x => x.id === m.id)) await this.ctx.globalState.update('caret.model', m.id); break;
       case 'setPerm': await this.setPerm(m.perm); break;
       case 'setMode': if (MODES.includes(m.mode)) await this.ctx.globalState.update('caret.mode', m.mode); break;

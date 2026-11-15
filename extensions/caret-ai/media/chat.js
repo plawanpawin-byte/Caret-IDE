@@ -92,7 +92,7 @@
   const permSel = dropdown({ cls: 'perm', title: 'What the AI may do', align: 'right', onpick: v => { S.perm = v; vscode.postMessage({ type: 'setPerm', perm: v }); } });
   permSel.setItems([
     { value: 'readonly', label: 'Read only', desc: 'Only reads and searches your code. Changes nothing.', icon: ICO('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>') },
-    { value: 'auto', label: 'Auto', desc: 'Edits files and runs safe commands by itself. Asks before risky ones.', icon: ICO(SHIELD_PATH) },
+    { value: 'auto', label: 'Auto', desc: 'Edits files and runs commands by itself. Asks only before destructive ones.', icon: ICO(SHIELD_PATH) },
     { value: 'full', label: 'Full access', desc: 'Runs everything without asking. Use it in folders you trust.', icon: ICO(SHIELD_PATH + '<path d="M12 8v4M12 16h.01"/>') },
   ]);
   permSel.value = 'auto';
@@ -122,8 +122,29 @@
     permSel.value = S.perm || 'auto';
     sendBtn.innerHTML = S.busy ? STOP : SEND; sendBtn.classList.toggle('empty', !S.busy && !input.value.trim() && !pending.length); sendBtn.title = S.busy ? 'Stop' : 'Send (Enter)';
     // OpenRouter: the user signs in once; the models are paid from their own OpenRouter credits.
-    if (!(S.or && S.or.connected)) note.replaceChildren(h('button', { class: 'btn', text: 'Add your API key', title: 'Opens Settings, AI', onclick: () => vscode.postMessage({ type: 'openSettings', section: 'ai' }) }));
+    const connected = !!(S.or && S.or.connected);
+    composer.classList.toggle('off', !connected);
+    input.disabled = !connected;
+    input.placeholder = connected ? 'Plan, build, ask anything' : 'Connect your AI above to start';
+    if (!connected) { if (!note.querySelector('.connect')) note.replaceChildren(connectCard()); }
     else note.replaceChildren();
+  }
+
+  // Shown until an OpenRouter key is saved: paste it here, no trip to Settings.
+  function connectCard() {
+    const key = h('input', { class: 'keyin', type: 'password', placeholder: 'sk-or-...', autocomplete: 'off', spellcheck: 'false' });
+    const err = h('div', { class: 'keyerr' });
+    const go = h('button', { class: 'btn', type: 'button', text: 'Connect', disabled: '' });
+    const submit = () => { if (!key.value.trim() || go.disabled) return; go.disabled = true; go.textContent = 'Checking…'; err.textContent = ''; connectCard.pending = { go, err, key }; vscode.postMessage({ type: 'saveKey', key: key.value }); };
+    key.addEventListener('input', () => { go.disabled = !key.value.trim(); });
+    key.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+    go.addEventListener('click', submit);
+    return h('div', { class: 'connect' },
+      h('div', { class: 'ct', text: 'Connect your AI to start' }),
+      h('div', { class: 'cd', text: 'Caret uses your own OpenRouter account. You pay OpenRouter for what you use, nothing goes through us.' }),
+      h('ol', { class: 'cs' }, h('li', { text: 'Create a free OpenRouter account and add some credit.' }), h('li', { text: 'Create an API key and copy it.' }), h('li', { text: 'Paste it below.' })),
+      h('button', { class: 'link', type: 'button', text: 'Open OpenRouter keys page', onclick: () => vscode.postMessage({ type: 'link', name: 'keys' }) }),
+      h('div', { class: 'keyrow' }, key, go), err);
   }
 
   function scroll() { feed.scrollTop = feed.scrollHeight; }
@@ -220,6 +241,7 @@
   window.addEventListener('message', ev => {
     const m = ev.data;
     if (m.type === 'state') { S = { ...S, ...m }; build(); return; }
+    if (m.type === 'keyResult') { const p = connectCard.pending; if (p && !m.ok) { p.err.textContent = m.error || 'That key did not work.'; p.go.textContent = 'Connect'; p.go.disabled = !p.key.value.trim(); } return; }
     if (m.type === 'load') {
       feed.replaceChildren(); tools.clear(); todoCards.clear(); curAi = null; tasks = []; grp = null; runMode = 'code';
       for (const x of m.msgs || []) {
