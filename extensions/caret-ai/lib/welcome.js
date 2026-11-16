@@ -39,8 +39,7 @@ async function show(ctx, chat) {
       case 'openFolder': vscode.commands.executeCommand('workbench.action.files.openFolder'); break;
       case 'clone': vscode.commands.executeCommand('git.clone'); break;
       case 'ssh': connectSsh(); break;
-      case 'login': chat.login(); break;
-      case 'finishSetup': await aiconfig.handle(chat, m, x => panel && panel.webview.postMessage(x)); send(chat); break;
+      case 'finishSetup': await aiconfig.handle(chat, m, x => panel && panel.webview.postMessage(x)); send(chat); vscode.commands.executeCommand('workbench.view.explorer'); vscode.commands.executeCommand('caret.chat.focus'); break;
       case 'open': if (typeof m.uri === 'string') vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.parse(m.uri)); break;
       default: await aiconfig.handle(chat, m, x => panel && panel.webview.postMessage(x));
     }

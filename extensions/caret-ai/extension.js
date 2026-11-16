@@ -4,7 +4,6 @@ const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
 const fs = require('fs');
-const auth = require('./lib/auth');
 const cli = require('./lib/cli');
 const welcome = require('./lib/welcome');
 const openrouter = require('./lib/openrouter');
@@ -21,9 +20,12 @@ const MODE_NOTE = {
 };
 const IMG_RE = /^data:image\/(png|jpeg|webp|gif);base64,([A-Za-z0-9+/=]+)$/;
 
+// The name shown in greetings: this computer's user name.
+function localName() { try { return os.userInfo().username || 'there'; } catch { return 'there'; } }
+
 class Chat {
   constructor(ctx) {
-    this.ctx = ctx; this.view = null; this.run = null; this.account = null;
+    this.ctx = ctx; this.view = null; this.run = null; this.account = { login: localName() };
     this.chats = ctx.globalState.get('caret.allchats') || [];
     this.pending = ctx.globalState.get('caret.pendingChat') || null;
     this.cur = this.blank();
@@ -32,16 +34,11 @@ class Chat {
 
   async init() {
     cli.fixPath();
-    const token = await this.ctx.secrets.get('caret.token');
-    const login = this.ctx.globalState.get('caret.login');
-    if (token && login) this.account = { login };
-    if (token) {
-      const me = await auth.check(token);
-      if (me === null) await this.clearAccount();
-      else if (me) { this.account = { login: me.login }; await this.ctx.globalState.update('caret.login', me.login); }
-    }
+    // older versions signed in with GitHub; that sign-in is gone, so forget what it left behind
+    this.ctx.secrets.delete('caret.token').then(undefined, () => {});
+    for (const k of ['caret.login', 'caret.avatar', 'caret.dataOwner']) this.ctx.globalState.update(k, undefined);
     this.orKey = await this.ctx.secrets.get('caret.orkey');
-    await this.migrate(); await this.adopt();
+    await this.migrate();
     if (this.moveHist()) await this.ctx.globalState.update('caret.allchats', this.chats);
     this.push(); this.applyPending();
     this.loadModels();
@@ -82,30 +79,9 @@ class Chat {
     if (c) { this.cur = c; this.post({ type: 'load', msgs: c.msgs }); this.titleNow(); }
   }
   changed() { try { this.onAccount?.(); } catch {} }
-  // Chats and settings belong to one GitHub account. A different account on the same computer must not see them.
-  me() { return this.account ? this.account.login : null; }
-  mine() { return this.chats.filter(c => c.owner && c.owner === this.me()); }
-  async adopt() {
-    // data from before accounts were tracked goes to the first account that logs in
-    const login = this.me(); if (!login) return;
-    let n = false; for (const c of this.chats) if (!c.owner) { c.owner = login; n = true; }
-    if (n) await this.ctx.globalState.update('caret.allchats', this.chats);
-    if (!this.ctx.globalState.get('caret.dataOwner') && (this.orKey || this.ctx.globalState.get('caret.onboarded'))) await this.ctx.globalState.update('caret.dataOwner', login);
-  }
-  // The API key and the personal settings of the previous person: removed.
-  async wipeSettings() {
-    this.orKey = null;
-    await this.ctx.secrets.delete('caret.orkey');
-    for (const k of ['caret.role', 'caret.onboarded', 'caret.enabled', 'caret.model', 'caret.avatar', 'caret.dataOwner', 'caret.pendingChat']) await this.ctx.globalState.update(k, undefined);
-    this.pending = null; this.syncModels();
-    this.cur = this.blank(); this.post({ type: 'cleared' }); this.titleNow();
-  }
-  async clearAccount() {
-    this.account = null;
-    await this.ctx.secrets.delete('caret.token');
-    await this.ctx.globalState.update('caret.login', undefined);
-  }
-
+  // Everything stays on this computer: chats, settings and the key. There are no accounts.
+  me() { return this.account.login; }
+  mine() { return this.chats; }
   state() {
     return {
       type: 'state', account: this.account, models: MODELS, or: { connected: !!this.orKey }, root: this.root ? path.basename(this.root) : null,
@@ -237,8 +213,6 @@ class Chat {
       case 'send': await this.send(m); break;
       case 'stop': this.run?.stop(); break;
       case 'newChat': await this.newChat(); break;
-      case 'login': await this.login(); break;
-      case 'logout': { const t = await this.ctx.secrets.get('caret.token'); if (t) await auth.logout(t); await this.clearAccount(); await this.wipeSettings(); this.push(); this.changed(); break; }
       case 'openSettings': vscode.commands.executeCommand('caret.openSettings', m.section); break;
       case 'saveKey': case 'link': await require('./lib/aiconfig').handle(this, m, p => this.post(p)); break;
       case 'setModel': if (MODELS.some(x => x.id === m.id)) await this.ctx.globalState.update('caret.model', m.id); break;
@@ -246,23 +220,6 @@ class Chat {
       case 'setMode': if (MODES.includes(m.mode)) await this.ctx.globalState.update('caret.mode', m.mode); break;
       case 'openFile': this.openFile(String(m.path || '')); break;
     }
-  }
-
-  async login() {
-    try {
-      const a = await auth.signIn(url => vscode.env.openExternal(vscode.Uri.parse(url)));
-      // someone else's key and settings are removed before this person gets in
-      const owner = this.ctx.globalState.get('caret.dataOwner');
-      if (owner && owner !== a.login) await this.wipeSettings();
-      if (this.cur.owner && this.cur.owner !== a.login) { this.cur = this.blank(); this.post({ type: 'cleared' }); this.titleNow(); }
-      await this.ctx.globalState.update('caret.dataOwner', a.login);
-      await this.ctx.secrets.store('caret.token', a.token);
-      await this.ctx.globalState.update('caret.login', a.login);
-      await this.ctx.globalState.update('caret.avatar', String(a.avatar).startsWith('https://avatars.githubusercontent.com/') ? a.avatar : undefined);
-      this.account = { login: a.login };
-      await this.adopt();
-      this.push(); this.changed();
-    } catch (e) { this.post({ type: 'error', text: String(e.message || e) }); this.push(); }
   }
 
   openFile(p) {
@@ -287,7 +244,6 @@ class Chat {
 
   async send(m) {
     if (this.run) return;
-    if (!this.account) { this.post({ type: 'error', text: 'Log in first.' }); return; }
     const text = String(m.text || '').trim().slice(0, 20000);
     if (!text) return;
     const pick = MODELS.find(x => x.id === m.model) || MODELS[0];
@@ -354,29 +310,14 @@ function activate(ctx) {
     vscode.commands.registerCommand('caret.newChat', () => { chat.newChat(); vscode.commands.executeCommand('caret.chat.focus'); }),
     vscode.commands.registerCommand('caret.history', () => chat.history()),
     vscode.commands.registerCommand('caret.welcome', () => welcome.show(ctx, chat)),
-    vscode.commands.registerCommand('caret.signIn', () => chat.login()),
-    vscode.commands.registerCommand('caret.openSettings', section => settings.show(ctx, chat, typeof section === 'string' ? section : 'account')),
-    vscode.commands.registerCommand('caret.signOut', () => chat.onMessage({ type: 'logout' })),
+    vscode.commands.registerCommand('caret.openSettings', section => settings.show(ctx, chat, typeof section === 'string' ? section : 'profile')),
   );
-  chat.onAccount = () => {
-    welcome.refresh(chat);
-    if (chat.account) {
-      vscode.commands.executeCommand('workbench.view.explorer');
-      vscode.commands.executeCommand('caret.chat.focus');
-      if (!vscode.workspace.workspaceFolders?.length) welcome.show(ctx, chat);
-    } else {
-      welcome.show(ctx, chat);
-      vscode.commands.executeCommand('workbench.action.closeSidebar');
-      vscode.commands.executeCommand('workbench.action.closeAuxiliaryBar');
-    }
-  };
   chat.init().then(() => {
-    if (!chat.account || !vscode.workspace.workspaceFolders?.length) welcome.show(ctx, chat);
+    if (!ctx.globalState.get('caret.onboarded') || !vscode.workspace.workspaceFolders?.length) welcome.show(ctx, chat);
     setTimeout(welcome.closeStock, 2500);
-    if (!chat.account) { vscode.commands.executeCommand('workbench.action.closeSidebar'); vscode.commands.executeCommand('workbench.action.closeAuxiliaryBar'); }
-    else setTimeout(() => vscode.commands.executeCommand('caret.chat.focus'), 1200);
+    setTimeout(() => vscode.commands.executeCommand('caret.chat.focus'), 1200);
     // a folder was opened that has not been trusted yet: ask once, the answer is remembered
-    if (chat.account && chat.root && !process.env.CARET_DEV_OPEN_CHAT) setTimeout(() => chat.askTrust().then(() => chat.push()), 3000);
+    if (chat.root && !process.env.CARET_DEV_OPEN_CHAT) setTimeout(() => chat.askTrust().then(() => chat.push()), 3000);
   });
   // test hook for screenshots: CARET_DEV_OPEN_CHAT=1
   if (process.env.CARET_DEV_OPEN_CHAT) setTimeout(() => vscode.commands.executeCommand('caret.chat.focus'), 1500);

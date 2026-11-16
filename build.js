@@ -103,7 +103,7 @@ step('Settings opens Caret settings');
   const f = path.join(OUT, 'resources', 'app', 'out', 'vs', 'workbench', 'workbench.desktop.main.js');
   const code = fs.readFileSync(f, 'utf8');
   const from = 'run(t,i){let n=typeof i=="string"?{query:i}:aq(i);return t.get(Mn).openSettings({...n})}';
-  const to = 'run(t,i){if(i===void 0)return t.get(ye).executeCommand("caret.openSettings","account");let n=typeof i=="string"?{query:i}:aq(i);return t.get(Mn).openSettings({...n})}';
+  const to = 'run(t,i){if(i===void 0)return t.get(ye).executeCommand("caret.openSettings","profile");let n=typeof i=="string"?{query:i}:aq(i);return t.get(Mn).openSettings({...n})}';
   if (!code.includes(from)) throw new Error('Settings patch: the stock code was not found (the base app changed). Update build.js.');
   fs.writeFileSync(f, code.replace(from, () => to));
 }

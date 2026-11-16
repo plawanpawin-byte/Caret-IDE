@@ -1,5 +1,5 @@
 'use strict';
-// The Settings page: Account and AI live here; the other entries open the usual VS Code screens.
+// The Settings page: Profile and AI live here; the other entries open the usual VS Code screens.
 const vscode = require('vscode');
 const crypto = require('crypto');
 const aiconfig = require('./aiconfig');
@@ -15,7 +15,7 @@ const COMMANDS = {
 
 async function state(chat) {
   const s = await aiconfig.ai(chat);
-  return { ...s, type: 'settings', account: chat.account, avatar: chat.ctx.globalState.get('caret.avatar') || null };
+  return { ...s, type: 'settings', account: chat.account };
 }
 
 async function show(ctx, chat, section) {
@@ -26,16 +26,14 @@ async function show(ctx, chat, section) {
   const w = panel.webview, u = f => w.asWebviewUri(vscode.Uri.joinPath(media, f));
   const nonce = crypto.randomBytes(16).toString('base64');
   w.html = `<!doctype html><html><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${w.cspSource} https://avatars.githubusercontent.com data:; style-src ${w.cspSource}; script-src 'nonce-${nonce}';">
-<link rel="stylesheet" href="${u('ui.css')}"><link rel="stylesheet" href="${u('settings.css')}"></head><body data-section="${section || 'account'}"><div id="app"></div>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${w.cspSource} data:; style-src ${w.cspSource}; script-src 'nonce-${nonce}';">
+<link rel="stylesheet" href="${u('ui.css')}"><link rel="stylesheet" href="${u('settings.css')}"></head><body data-section="${section || 'profile'}"><div id="app"></div>
 <script nonce="${nonce}" src="${u('ui.js')}"></script><script nonce="${nonce}" src="${u('settings.js')}"></script></body></html>`;
   const post = m => panel && panel.webview.postMessage(m);
   w.onDidReceiveMessage(async m => {
     if (!m) return;
     if (m.type === 'ready') { post(await state(chat)); return; }
     if (m.type === 'cmd') { if (COMMANDS[m.name]) vscode.commands.executeCommand(COMMANDS[m.name]).then(undefined, () => {}); return; }
-    if (m.type === 'login') { chat.login(); return; }
-    if (m.type === 'logout') { await chat.onMessage({ type: 'logout' }); post(await state(chat)); return; }
     if (await aiconfig.handle(chat, m, post)) {
       if (m.type === 'saveRole') post(await state(chat));
     }

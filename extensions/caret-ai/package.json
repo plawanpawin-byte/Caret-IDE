@@ -20,9 +20,7 @@
       { "command": "caret.openChat", "title": "Caret: Open Chat" },
       { "command": "caret.newChat", "title": "Caret: New Chat", "icon": "$(add)" },
       { "command": "caret.history", "title": "Caret: Chat History", "icon": "$(history)" },
-      { "command": "caret.signIn", "title": "Caret: Log In" },
-      { "command": "caret.openSettings", "title": "Caret: Settings" },
-      { "command": "caret.signOut", "title": "Caret: Log Out" }
+      { "command": "caret.openSettings", "title": "Caret: Settings" }
     ],
     "menus": {
       "view/title": [
