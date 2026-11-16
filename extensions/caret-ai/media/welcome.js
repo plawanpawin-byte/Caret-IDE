@@ -26,7 +26,7 @@
         h('span', { class: 'n', text: i.name }), h('span', { class: 'd', text: '‎' + i.dir }))) : [h('div', { class: 'none', text: 'None yet' })]));
     app.replaceChildren(h('div', { class: 'wrap' },
       h('img', { class: 'logo', src: logo, alt: '' }),
-      h('h1', { text: account ? `Hey ${account.login}` : 'Caret IDE' }),
+      h('h1', { text: account ? `Hey ${account.login}` : 'CaretStudio' }),
       h('p', { class: 'sub', text: 'What should we build today?' }),
       h('div', { class: 'tiles' },
         tile('Open project', 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', 'openFolder', true),

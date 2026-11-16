@@ -3,6 +3,7 @@
 const vscode = require('vscode');
 const crypto = require('crypto');
 const aiconfig = require('./aiconfig');
+const update = require('./update');
 
 let panel = null;
 
@@ -15,7 +16,7 @@ const COMMANDS = {
 
 async function state(chat) {
   const s = await aiconfig.ai(chat);
-  return { ...s, type: 'settings', account: chat.account };
+  return { ...s, type: 'settings', account: chat.account, version: update.version(), autoUpdate: vscode.workspace.getConfiguration('caret').get('autoUpdate') !== false };
 }
 
 async function show(ctx, chat, section) {
@@ -33,6 +34,9 @@ async function show(ctx, chat, section) {
   w.onDidReceiveMessage(async m => {
     if (!m) return;
     if (m.type === 'ready') { post(await state(chat)); return; }
+    if (m.type === 'checkUpdate') { update.check({ manual: true }); return; }
+    if (m.type === 'feedback') { update.feedback(); return; }
+    if (m.type === 'setAutoUpdate') { await vscode.workspace.getConfiguration('caret').update('autoUpdate', !!m.on, vscode.ConfigurationTarget.Global); post(await state(chat)); return; }
     if (m.type === 'cmd') { if (COMMANDS[m.name]) vscode.commands.executeCommand(COMMANDS[m.name]).then(undefined, () => {}); return; }
     if (await aiconfig.handle(chat, m, post)) {
       if (m.type === 'saveRole') post(await state(chat));

@@ -54,7 +54,7 @@ async function connectSsh() {
   if (pick !== 'Install') return;
   try {
     await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Installing Open Remote - SSH' }, () => vscode.commands.executeCommand('workbench.extensions.installExtension', 'jeanp413.open-remote-ssh'));
-    const next = await vscode.window.showInformationMessage('Installed. Reload Caret IDE, then press Connect via SSH again.', 'Reload');
+    const next = await vscode.window.showInformationMessage('Installed. Reload CaretStudio, then press Connect via SSH again.', 'Reload');
     if (next === 'Reload') vscode.commands.executeCommand('workbench.action.reloadWindow');
   } catch (e) { vscode.window.showErrorMessage('Could not install the extension: ' + String(e.message || e)); }
 }

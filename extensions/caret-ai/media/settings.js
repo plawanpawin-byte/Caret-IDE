@@ -14,11 +14,17 @@
     const a = S.account;
     const sel = h('select', { class: 'sel', onchange: e => vscode.postMessage({ type: 'saveRole', role: e.target.value }) }, h('option', { value: '', text: 'Choose…' }), ...ROLES.map(r => h('option', { value: r.id, text: r.label })));
     sel.value = S.role || '';
+    const upd = h('select', { class: 'sel', onchange: e => vscode.postMessage({ type: 'setAutoUpdate', on: e.target.value === 'on' }) }, h('option', { value: 'on', text: 'On' }), h('option', { value: 'off', text: 'Off' }));
+    upd.value = S.autoUpdate === false ? 'off' : 'on';
     return [h('h2', { text: 'Profile' }),
       row('Name', 'The user name of this computer.', h('div', { class: 'val', text: a ? a.login : '' })),
       row('What best describes your work?', null, sel),
       h('h3', { text: 'Your data' }),
-      row('Stored on this computer', 'Chats, settings and your OpenRouter key stay on this computer. Nothing is stored in the cloud.', null)];
+      row('Stored on this computer', 'Chats, settings and your OpenRouter key stay on this computer. Nothing is stored in the cloud. What you send to the AI goes to OpenRouter, using your key.', null),
+      h('h3', { text: 'About' }),
+      row('CaretStudio ' + (S.version || ''), 'Looks at GitHub for a new version and offers to install it. Nothing about you is sent.', h('button', { class: 'btn2', type: 'button', text: 'Check for updates', onclick: () => vscode.postMessage({ type: 'checkUpdate' }) })),
+      row('Update automatically', 'Check for a new version when CaretStudio starts.', upd),
+      row('Send feedback', 'Opens a page on GitHub where you can describe a problem or an idea.', h('button', { class: 'btn2', type: 'button', text: 'Send feedback', onclick: () => vscode.postMessage({ type: 'feedback' }) }))];
   }
 
   function aiPage() {

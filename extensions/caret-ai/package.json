@@ -1,7 +1,7 @@
 {
   "name": "caret-ai",
   "displayName": "Caret AI",
-  "description": "AI chat and agent inside Caret IDE.",
+  "description": "AI chat inside CaretStudio.",
   "version": "0.1.0",
   "publisher": "caret",
   "engines": { "vscode": "^1.90.0" },
@@ -20,14 +20,19 @@
       { "command": "caret.openChat", "title": "Caret: Open Chat" },
       { "command": "caret.newChat", "title": "Caret: New Chat", "icon": "$(add)" },
       { "command": "caret.history", "title": "Caret: Chat History", "icon": "$(history)" },
-      { "command": "caret.openSettings", "title": "Caret: Settings" }
+      { "command": "caret.openSettings", "title": "Caret: Settings" },
+      { "command": "caret.checkForUpdates", "title": "Caret: Check for Updates" },
+      { "command": "caret.feedback", "title": "Caret: Send Feedback" }
     ],
     "menus": {
       "view/title": [
         { "command": "caret.newChat", "when": "view == caret.chat", "group": "navigation@1" },
-        { "command": "caret.history", "when": "view == caret.chat", "group": "navigation@2" }
+        { "command": "caret.history", "when": "view == caret.chat", "group": "navigation@2" },
+        { "command": "caret.feedback", "when": "view == caret.chat", "group": "1_misc@1" },
+        { "command": "caret.checkForUpdates", "when": "view == caret.chat", "group": "1_misc@2" }
       ]
     },
+    "configuration": { "title": "Caret", "properties": { "caret.autoUpdate": { "type": "boolean", "default": true, "description": "Look for a new CaretStudio version on GitHub and offer to install it." } } },
     "keybindings": [
       { "command": "caret.openChat", "key": "ctrl+l" },
       { "command": "caret.newChat", "key": "ctrl+shift+l" }

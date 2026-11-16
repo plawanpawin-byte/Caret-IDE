@@ -83,7 +83,6 @@
   modeSel.setItems([
     { value: 'plan', label: 'Plan', desc: 'Makes a task list. Changes nothing.' },
     { value: 'code', label: 'Code', desc: 'Writes the code and edits files.' },
-    { value: 'agent', label: 'Agent', desc: 'Like Code, with the work split between sub-agents.' },
   ]);
   modeSel.value = 'code';
   // What the AI may do: Read only, Auto (edits and safe commands, asks before risky ones), Full access (everything).
@@ -106,7 +105,7 @@
   function hello() {
     const who = S.account?.login;
     feed.replaceChildren(h('div', { class: 'hello' }, h('img', { src: logo, alt: '' }),
-      h('h1', { text: who ? `Hey ${who}, what should we build today?` : 'Caret IDE' }),
+      h('h1', { text: who ? `Hey ${who}, what should we build today?` : 'CaretStudio' }),
       S.root ? null : h('p', { text: 'Open a folder to start (File, Open Folder).' })));
   }
 
@@ -301,7 +300,7 @@
       else if (m.plan && tasks.length) {
         const go = mode => { S.mode = mode; modeSel.value = mode; vscode.postMessage({ type: 'setMode', mode }); card.remove(); send('Go ahead and build the plan above.'); };
         const card = h('div', { class: 'plan' }, h('div', { text: 'Plan ready. Switch to a coding mode to build it?' }),
-          h('div', { class: 'acts' }, h('button', { class: 'btn', onclick: () => go('code') }, 'Code'), h('button', { class: 'btn ghost', onclick: () => go('agent') }, 'Agent'), h('button', { class: 'btn ghost', onclick: () => card.remove() }, 'Keep planning')));
+          h('div', { class: 'acts' }, h('button', { class: 'btn', onclick: () => go('code') }, 'Code'), h('button', { class: 'btn ghost', onclick: () => card.remove() }, 'Keep planning')));
         feed.append(card);
       }
       curAi = null; scroll();

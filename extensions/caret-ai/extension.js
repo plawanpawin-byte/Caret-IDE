@@ -8,11 +8,12 @@ const cli = require('./lib/cli');
 const welcome = require('./lib/welcome');
 const openrouter = require('./lib/openrouter');
 const settings = require('./lib/settings');
+const update = require('./lib/update');
 const { runAgent } = require('./lib/agent');
 
 // The model list comes from OpenRouter (filled in by loadModels). tool: how it runs; model: the name handed to it.
 const MODELS = [];
-const MODES = ['plan', 'code', 'agent'];
+const MODES = ['plan', 'code'];   // Agent mode is hidden: it worked like Code
 const MODE_NOTE = {
   plan: 'PLAN MODE. Do not change any file and do not run anything that changes the project. Do not write a plan file. If the request is a job to do, reply with the tasks that would get it done, one line per task, each line starting with `[ ] ` (3 to 7 short tasks, nothing else about the list), and do not start the work. If it is only a question or a chat, just answer it normally and write no `[ ]` lines.',
   code: 'TASK LIST (required). For any job that builds or changes files, your FIRST message, before any tool call, is the task list: 3 to 7 short tasks, one line each, each line starting with `[ ] `. Then do the tasks one at a time, in order. Right after you finish a task, write one line `[x] ` followed by the same task text. Write nothing else about the list. Only a plain question or a one-line fix may skip the list.',
@@ -310,8 +311,11 @@ function activate(ctx) {
     vscode.commands.registerCommand('caret.newChat', () => { chat.newChat(); vscode.commands.executeCommand('caret.chat.focus'); }),
     vscode.commands.registerCommand('caret.history', () => chat.history()),
     vscode.commands.registerCommand('caret.welcome', () => welcome.show(ctx, chat)),
+    vscode.commands.registerCommand('caret.checkForUpdates', () => update.check({ manual: true })),
+    vscode.commands.registerCommand('caret.feedback', () => update.feedback()),
     vscode.commands.registerCommand('caret.openSettings', section => settings.show(ctx, chat, typeof section === 'string' ? section : 'profile')),
   );
+  update.start(ctx);
   chat.init().then(() => {
     if (!ctx.globalState.get('caret.onboarded') || !vscode.workspace.workspaceFolders?.length) welcome.show(ctx, chat);
     setTimeout(welcome.closeStock, 2500);

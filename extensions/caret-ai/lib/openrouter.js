@@ -10,7 +10,7 @@ const KEYS_URL = 'https://openrouter.ai/settings/keys';
 function request(method, path, body, headers, onData, signal) {
   return new Promise((resolve, reject) => {
     const data = body ? JSON.stringify(body) : null;
-    const req = https.request({ host: HOST, path, method, headers: { 'Content-Type': 'application/json', 'X-Title': 'Caret IDE', 'HTTP-Referer': 'https://github.com/plawanpawin-byte', ...(data ? { 'Content-Length': Buffer.byteLength(data) } : {}), ...(headers || {}) } }, res => {
+    const req = https.request({ host: HOST, path, method, headers: { 'Content-Type': 'application/json', 'X-Title': 'CaretStudio', 'HTTP-Referer': 'https://github.com/plawanpawin-byte', ...(data ? { 'Content-Length': Buffer.byteLength(data) } : {}), ...(headers || {}) } }, res => {
       if (onData && res.statusCode === 200) { res.setEncoding('utf8'); res.on('data', onData); res.on('end', () => resolve({ status: 200 })); res.on('error', reject); return; }
       let out = ''; res.setEncoding('utf8'); res.on('data', d => { out += d; }); res.on('end', () => resolve({ status: res.statusCode, text: out }));
     });
